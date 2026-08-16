@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FM Breach Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root{--navy:#0F1F3D;--navy2:#1B2A4A;--blue:#2563EB;--red:#DC2626;--amber:#D97706;--green:#059669;--purple:#7C3AED;--border:#E2E8F0;--text:#1E293B;--muted:#64748B;--bg:#F1F5F9;--white:#fff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:13px}
+.hdr{background:var(--navy);padding:13px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;border-bottom:3px solid var(--blue)}
+.hdr-title{color:#fff;font-size:16px;font-weight:700}
+.hdr-meta{color:#94A3B8;font-size:11px;margin-top:2px}
+.filters{background:var(--white);border-bottom:1px solid var(--border);padding:9px 22px;display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.fg{display:flex;flex-direction:column;gap:3px;position:relative}
+.fg label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.fg select{font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--white);min-width:118px;outline:none}
+.fg select:focus{border-color:var(--blue)}
+.btn-reset{background:var(--navy2);color:#fff;align-self:flex-end;padding:5px 13px;border-radius:5px;border:none;font-size:12px;font-weight:600;cursor:pointer}
+.btn-reset:hover{opacity:.85}
+.date-btn{font-size:12px;padding:5px 10px;border:1px solid var(--border);border-radius:5px;background:var(--white);min-width:150px;cursor:pointer;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:6px;white-space:nowrap}
+.date-btn:hover{border-color:var(--blue)}
+.date-dropdown{display:none;position:absolute;top:100%;left:0;z-index:100;background:var(--white);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:190px;max-height:280px;overflow-y:auto;margin-top:3px}
+.date-dropdown.open{display:block}
+.date-dropdown-header{padding:8px 12px;border-bottom:1px solid var(--border);display:flex;gap:8px}
+.date-dropdown-header button{font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);cursor:pointer;color:var(--text)}
+.date-dropdown-header button:hover{background:var(--blue);color:#fff;border-color:var(--blue)}
+.date-item{display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:12px}
+.date-item:hover{background:#EFF6FF}
+.date-item input[type=checkbox]{accent-color:var(--blue);width:14px;height:14px;cursor:pointer}
+.kpi-header{background:var(--white);border-bottom:1px solid var(--border);padding:8px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.kpi-bar{display:flex;gap:10px;padding:12px 22px;flex-wrap:wrap}
+.kpi{background:var(--white);border-radius:8px;padding:11px 16px;flex:1;min-width:110px;border:1px solid var(--border);border-top:3px solid}
+.kpi.k0{border-top-color:var(--navy2)}.kpi.k1{border-top-color:var(--red)}.kpi.k2{border-top-color:var(--purple)}.kpi.k3{border-top-color:var(--green)}.kpi.k4{border-top-color:var(--amber)}
+.k-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px}
+.k-val{font-size:22px;font-weight:800;color:var(--navy2);line-height:1}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:0 22px 16px}
+.chart-card{background:var(--white);border-radius:10px;border:1px solid var(--border);padding:16px}
+.chart-title{font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.04em}
+.chart-wrap{position:relative;height:220px}
+.sections{padding:0 22px 22px;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--white);border-radius:10px;border:1px solid var(--border);overflow:hidden}
+.card-head{padding:11px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px}
+.card-title{font-size:13px;font-weight:700;color:var(--navy2);display:flex;align-items:center;gap:8px}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.d0{background:var(--navy2)}.d1{background:var(--blue)}.d2{background:var(--amber)}
+.ptabs{display:flex}
+.pt{padding:4px 11px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);color:var(--muted);background:var(--bg)}
+.pt:first-child{border-radius:5px 0 0 5px}.pt:last-child{border-radius:0 5px 5px 0}
+.pt.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.tw{overflow:auto;max-height:500px}
+table{width:100%;border-collapse:collapse}
+thead{position:sticky;top:0;z-index:2}
+thead tr{background:var(--navy2);color:#fff}
+th{padding:9px 12px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.04em;white-space:nowrap;cursor:pointer;user-select:none;position:relative}
+th:hover{background:#223360}
+th.r{text-align:right}
+th .si{margin-left:4px;opacity:.5;font-size:10px}
+th.sorted-asc .si::after{content:'\2191'}
+th.sorted-desc .si::after{content:'\2193'}
+th:not(.sorted-asc):not(.sorted-desc) .si::after{content:'\21C5'}
+tbody tr:nth-child(even){background:#F8FAFC}
+tbody tr:hover{background:#EFF6FF}
+tr.rt{background:#FEF9C3!important;font-weight:700}
+td{padding:8px 12px;font-size:12px;border-bottom:1px solid var(--border);white-space:nowrap}
+td.r{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.zbadge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:10px;font-weight:700}
+.z-North{background:#DBEAFE;color:#1e3a8a}
+.z-South{background:#D1FAE5;color:#065f46}
+.z-East{background:#FEF3C7;color:#92400e}
+.z-West{background:#FCE7F3;color:#9d174d}
+.z-Unknown{background:#F3F4F6;color:#374151}
+.no-data{text-align:center;padding:36px;color:var(--muted);font-size:14px}
+.sbar{padding:7px 22px;font-size:12px;color:var(--muted);background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;min-height:32px}
+.spin{width:13px;height:13px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:sp .7s linear infinite;display:inline-block;flex-shrink:0}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div>
+    <div class="hdr-title">&#128666; FM Breach Dashboard</div>
+    <div class="hdr-meta" id="hdr-meta">Loading...</div>
+  </div>
+  <span style="color:#475569;font-size:11px" id="last-upd">Last updated: 15-08-2026</span>
+</div>
+<div class="filters">
+  <div class="fg" id="date-fg">
+    <label>Date</label>
+    <button class="date-btn" id="date-btn" onclick="toggleDateDD(event)">
+      <span id="date-btn-label">All Dates</span><span>&#9660;</span>
+    </button>
+    <div class="date-dropdown" id="date-dd">
+      <div class="date-dropdown-header">
+        <button onclick="selectAllDates()">All</button>
+        <button onclick="clearAllDates()">None</button>
+      </div>
+      <div id="date-list"></div>
+    </div>
+  </div>
+  <div class="fg"><label>Zone</label><select id="f-zone" onchange="applyFilters()"><option value="">All Zones</option></select></div>
+  <div class="fg"><label>GM</label><select id="f-gm" onchange="applyFilters()"><option value="">All GMs</option></select></div>
+  <div class="fg"><label>RM</label><select id="f-rm" onchange="applyFilters()"><option value="">All RMs</option></select></div>
+  <div class="fg"><label>AM</label><select id="f-am" onchange="applyFilters()"><option value="">All AMs</option></select></div>
+  <div class="fg"><label>Hub (PH)</label><select id="f-ph" onchange="applyFilters()"><option value="">All Hubs</option></select></div>
+  <div class="fg">
+    <label>Functional / CPD</label>
+    <select id="f-type" onchange="applyFilters()">
+      <option value="all">Functional (All)</option>
+      <option value="cpd">CPD Breach only</option>
+    </select>
+  </div>
+  <button class="btn-reset" onclick="resetFilters()">Reset</button>
+</div>
+<div class="sbar" id="sbar"><span class="spin"></span> Initialising...</div>
+<div class="kpi-header">
+  <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Summary</span>
+  <div class="ptabs" id="tp-kpi">
+    <div class="pt on" onclick="setKpiP(1,this)">D-1</div>
+    <div class="pt" onclick="setKpiP(3,this)">Last 3 Days</div>
+    <div class="pt" onclick="setKpiP(7,this)">Last 7 Days</div>
+    <div class="pt" onclick="setKpiP(10,this)">Last 10 Days</div>
+    <div class="pt" onclick="setKpiP(999,this)">Overall</div>
+  </div>
+</div>
+<div class="kpi-bar" id="kpi-bar"></div>
+<div class="charts-row">
+  <div class="chart-card">
+    <div class="chart-title">&#128202; Breach Trend by Date</div>
+    <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">&#9685; Breach Mix (Current Period)</div>
+    <div class="chart-wrap"><canvas id="chart-mix"></canvas></div>
+  </div>
+</div>
+<div class="sections">
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><span class="dot d0"></span>Overall Breach &mdash; Attempt + EKL + Auto Reset + Dispatch</div>
+      <div class="ptabs" id="tp0">
+        <div class="pt on" onclick="setP(0,1,this)">D-1</div>
+        <div class="pt" onclick="setP(0,3,this)">Last 3 Days</div>
+        <div class="pt" onclick="setP(0,7,this)">Last 7 Days</div>
+        <div class="pt" onclick="setP(0,10,this)">Last 10 Days</div>
+        <div class="pt" onclick="setP(0,999,this)">Overall</div>
+      </div>
+    </div>
+    <div class="tw"><table id="t0"><tbody><tr><td class="no-data">Loading...</td></tr></tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><span class="dot d1"></span>Pickup Breach &mdash; Attempt + EKL + Auto Reset</div>
+      <div class="ptabs" id="tp1">
+        <div class="pt on" onclick="setP(1,1,this)">D-1</div>
+        <div class="pt" onclick="setP(1,3,this)">Last 3 Days</div>
+        <div class="pt" onclick="setP(1,7,this)">Last 7 Days</div>
+        <div class="pt" onclick="setP(1,10,this)">Last 10 Days</div>
+        <div class="pt" onclick="setP(1,999,this)">Overall</div>
+      </div>
+    </div>
+    <div class="tw"><table id="t1"><tbody><tr><td class="no-data">Loading...</td></tr></tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><span class="dot d2"></span>Dispatch Breach</div>
+      <div class="ptabs" id="tp2">
+        <div class="pt on" onclick="setP(2,1,this)">D-1</div>
+        <div class="pt" onclick="setP(2,3,this)">Last 3 Days</div>
+        <div class="pt" onclick="setP(2,7,this)">Last 7 Days</div>
+        <div class="pt" onclick="setP(2,10,this)">Last 10 Days</div>
+        <div class="pt" onclick="setP(2,999,this)">Overall</div>
+      </div>
+    </div>
+    <div class="tw"><table id="t2"><tbody><tr><td class="no-data">Loading...</td></tr></tbody></table></div>
+  </div>
+</div>
+
+<script>
+const EMBEDDED=null; // data loaded from data.json
+async function loadData(){
+  try{
+    const r=await fetch('data.json');
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const rows=await r.json();
+    init(rows);
+  }catch(e){
+    setS('err','Failed to load data.json: '+e.message);
+  }
+}
+const BA='Attempt Breach',BE='EKL Issue',BR='Auto Reset',BD='Dispatch breach';
+const ALL=[BA,BE,BR,BD],PICKUP=[BA,BE,BR];
+let RAW=EMBEDDED,DATES=[],filtered=[],periods=[1,1,1],kpiPeriod=1;
+let selectedDates=new Set();
+let chartTrend=null,chartMix=null;
+// sortState per table: {col, asc}
+let sortState=[{col:9,asc:false},{col:8,asc:false},{col:6,asc:false}];
+
+function dv(s){const p=s.split('-');return new Date(p[2]+'-'+p[1]+'-'+p[0]).getTime();}
+
+function init(rows){
+  RAW=rows;
+  DATES=[...new Set(RAW.map(r=>r.date))].sort((a,b)=>dv(b)-dv(a));
+  selectedDates=new Set();
+  document.getElementById('hdr-meta').textContent=
+    DATES.length+' dates \u00b7 '+RAW.length.toLocaleString()+' records \u00b7 Latest: '+DATES[0];
+  buildFilters();applyFilters();
+  setS('ok','\u2713 Ready \u2014 '+RAW.length.toLocaleString()+' records across '+DATES.length+' dates');
+}
+
+function loadExcel(input){
+  const file=input.files[0];if(!file)return;
+  setS('spin','Reading '+file.name+'...');
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const map={};
+      wb.SheetNames.forEach(sheet=>{
+        if(!/^\d{2}-\d{2}-\d{4}$/.test(sheet.trim()))return;
+        const json=XLSX.utils.sheet_to_json(wb.Sheets[sheet],{defval:''});
+        json.forEach(r=>{
+          const bkt=String(r['Bucket']||r['bucket']||'').trim();if(!bkt)return;
+          const zone=String(r['ph_zone']||'').trim()||'Unknown';
+          const gm=String(r['GM']||'').trim()||'Unknown';
+          const rm=String(r['RM']||r['rm']||'').trim();
+          const am=String(r['AM']||r['am']||'').trim();
+          const ph=String(r['ph_name']||'').trim()||'Unknown';
+          const cpd=['1','yes','true'].includes(String(r['cpd']||r['CPD']||'').toLowerCase());
+          const k=sheet+'|'+zone+'|'+gm+'|'+rm+'|'+am+'|'+ph+'|'+bkt;
+          if(!map[k])map[k]={date:sheet.trim(),zone,gm,rm,am,ph,bucket:bkt,cpd,cnt:0};
+          map[k].cnt++;
+        });
+      });
+      document.getElementById('last-upd').textContent='Last updated: '+new Date().toLocaleDateString('en-GB').replace(/\//g,'-');
+      init(Object.values(map));
+    }catch(ex){setS('err','\u274c Error: '+ex.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── Multi-date ──
+function buildDateList(){
+  const list=document.getElementById('date-list');
+  list.innerHTML='';
+  const active=activeDates();
+  DATES.forEach(d=>{
+    const item=document.createElement('label');
+    item.className='date-item';
+    const chk=document.createElement('input');
+    chk.type='checkbox';chk.value=d;
+    chk.checked=selectedDates.size===0||active.has(d);
+    chk.onchange=()=>{
+      if(selectedDates.size===0) selectedDates=new Set(DATES);
+      if(chk.checked) selectedDates.add(d); else selectedDates.delete(d);
+      if(selectedDates.size===DATES.length) selectedDates=new Set();
+      updateDateBtnLabel();applyFilters();
+    };
+    item.appendChild(chk);
+    item.appendChild(document.createTextNode(d));
+    list.appendChild(item);
+  });
+  updateDateBtnLabel();
+}
+function selectAllDates(){selectedDates=new Set();buildDateList();applyFilters();}
+function clearAllDates(){selectedDates=new Set(['__none__']);buildDateList();applyFilters();}
+function updateDateBtnLabel(){
+  const lbl=document.getElementById('date-btn-label');
+  if(selectedDates.size===0) lbl.textContent='All Dates';
+  else if(selectedDates.has('__none__')) lbl.textContent='None selected';
+  else if(selectedDates.size===1) lbl.textContent=[...selectedDates][0];
+  else lbl.textContent=selectedDates.size+' dates selected';
+}
+function toggleDateDD(e){e.stopPropagation();document.getElementById('date-dd').classList.toggle('open');}
+document.addEventListener('click',e=>{
+  if(!document.getElementById('date-fg').contains(e.target))
+    document.getElementById('date-dd').classList.remove('open');
+});
+function activeDates(){
+  if(selectedDates.size===0) return new Set(DATES);
+  if(selectedDates.has('__none__')) return new Set();
+  return selectedDates;
+}
+
+// ── Filters ──
+function buildFilters(){
+  const uniq=k=>[...new Set(RAW.map(r=>r[k]).filter(Boolean))].sort();
+  pop('f-zone',uniq('zone'));pop('f-gm',uniq('gm'));
+  pop('f-rm',uniq('rm'));pop('f-am',uniq('am'));pop('f-ph',uniq('ph'));
+  buildDateList();
+}
+function pop(id,vals){
+  const el=document.getElementById(id);const cur=el.value;
+  el.innerHTML='<option value="">All</option>';
+  vals.forEach(v=>{if(!v)return;const o=document.createElement('option');o.value=v;o.textContent=v;el.appendChild(o);});
+  if([...el.options].some(o=>o.value===cur))el.value=cur;
+}
+const fv=id=>document.getElementById(id).value;
+function resetFilters(){
+  ['f-zone','f-gm','f-rm','f-am','f-ph'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-type').value='all';
+  selectedDates=new Set();buildDateList();applyFilters();
+}
+function applyFilters(){
+  const zone=fv('f-zone'),gm=fv('f-gm'),rm=fv('f-rm'),am=fv('f-am'),ph=fv('f-ph'),type=fv('f-type');
+  const ad=activeDates();
+  filtered=RAW.filter(r=>ad.has(r.date)&&(!zone||r.zone===zone)&&(!gm||r.gm===gm)&&(!rm||r.rm===rm)&&(!am||r.am===am)&&(!ph||r.ph===ph)&&(type!=='cpd'||r.cpd));
+  renderKPIs();renderCharts();renderAll();
+}
+
+// ── KPI ──
+function setKpiP(days,el){
+  kpiPeriod=days;
+  document.getElementById('tp-kpi').querySelectorAll('.pt').forEach(t=>t.classList.remove('on'));
+  el.classList.add('on');renderKPIs();renderCharts();
+}
+function datesForN(n){return new Set(DATES.slice(0,Math.min(n,DATES.length)));}
+function renderKPIs(){
+  const ds=datesForN(kpiPeriod);
+  const rows=filtered.filter(r=>ds.has(r.date));
+  const cnt=bkts=>rows.filter(r=>bkts.includes(r.bucket)).reduce((s,r)=>s+r.cnt,0);
+  const label=kpiPeriod===1?'D-1':kpiPeriod===999?'Overall':'Last '+kpiPeriod+' Days';
+  document.getElementById('kpi-bar').innerHTML=
+    '<div class="kpi k0"><div class="k-lbl">Total ('+label+')</div><div class="k-val">'+N(cnt(ALL))+'</div></div>'+
+    '<div class="kpi k1"><div class="k-lbl">Attempt Breach</div><div class="k-val">'+N(cnt([BA]))+'</div></div>'+
+    '<div class="kpi k2"><div class="k-lbl">EKL Issue</div><div class="k-val">'+N(cnt([BE]))+'</div></div>'+
+    '<div class="kpi k3"><div class="k-lbl">Auto Reset</div><div class="k-val">'+N(cnt([BR]))+'</div></div>'+
+    '<div class="kpi k4"><div class="k-lbl">Dispatch Breach</div><div class="k-val">'+N(cnt([BD]))+'</div></div>';
+}
+
+// ── Charts ──
+function renderCharts(){
+  const ds=datesForN(kpiPeriod);
+  const rows=filtered.filter(r=>ds.has(r.date));
+  const tDates=[...new Set(rows.map(r=>r.date))].sort((a,b)=>dv(a)-dv(b));
+  const g=(d,b)=>rows.filter(r=>r.date===d&&r.bucket===b).reduce((s,r)=>s+r.cnt,0);
+  if(chartTrend){chartTrend.destroy();chartTrend=null;}
+  chartTrend=new Chart(document.getElementById('chart-trend').getContext('2d'),{
+    type:'bar',
+    data:{labels:tDates,datasets:[
+      {label:'Attempt',data:tDates.map(d=>g(d,BA)),backgroundColor:'#DC2626',stack:'s'},
+      {label:'EKL',data:tDates.map(d=>g(d,BE)),backgroundColor:'#7C3AED',stack:'s'},
+      {label:'Auto Reset',data:tDates.map(d=>g(d,BR)),backgroundColor:'#059669',stack:'s'},
+      {label:'Dispatch',data:tDates.map(d=>g(d,BD)),backgroundColor:'#D97706',stack:'s'},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:12}}},scales:{x:{ticks:{font:{size:10}}},y:{ticks:{font:{size:10}}}}}
+  });
+  const mx=[BA,BE,BR,BD].map(b=>rows.filter(r=>r.bucket===b).reduce((s,r)=>s+r.cnt,0));
+  if(chartMix){chartMix.destroy();chartMix=null;}
+  chartMix=new Chart(document.getElementById('chart-mix').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:['Attempt','EKL Issue','Auto Reset','Dispatch'],datasets:[{data:mx,backgroundColor:['#DC2626','#7C3AED','#059669','#D97706'],borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:12}}}}
+  });
+}
+
+// ── Tables ──
+function setP(sec,days,el){
+  periods[sec]=days;
+  document.getElementById('tp'+sec).querySelectorAll('.pt').forEach(t=>t.classList.remove('on'));
+  el.classList.add('on');renderSec(sec);
+}
+function renderAll(){[0,1,2].forEach(i=>renderSec(i));}
+
+// Column index map per section (0-based in data row)
+// cols: 0=Hub,1=Zone,2=GM,3=RM,4=AM,5=Attempt,6=EKL,7=AR,8=Dispatch,9=Total
+// pickup: 0=Hub,1=Zone,2=GM,3=RM,4=AM,5=Attempt,6=EKL,7=AR,8=Total
+// dispatch: 0=Hub,1=Zone,2=GM,3=RM,4=AM,5=Dispatch,6=Total
+
+function sortRows(rows, col, asc, buckets){
+  const sA=buckets.includes(BA),sE=buckets.includes(BE),sR=buckets.includes(BR),sD=buckets.includes(BD);
+  // Build col key
+  const key=col===0?'ph':col===1?'zone':col===2?'gm':col===3?'rm':col===4?'am':
+    (()=>{
+      // numeric cols depend on which buckets shown
+      const nums=[];
+      if(sA)nums.push('a');if(sE)nums.push('e');if(sR)nums.push('ar');if(sD)nums.push('d');
+      nums.push('t');
+      const numIdx=col-5;
+      return nums[numIdx]||'t';
+    })();
+  return [...rows].sort((a,b)=>{
+    const av=a[key]||0,bv=b[key]||0;
+    if(typeof av==='string') return asc?av.localeCompare(bv):bv.localeCompare(av);
+    return asc?av-bv:bv-av;
+  });
+}
+
+function renderSec(sec){
+  const buckets=sec===0?ALL:sec===1?PICKUP:[BD];
+  const ds=datesForN(periods[sec]);
+  const rows=filtered.filter(r=>ds.has(r.date)&&buckets.includes(r.bucket));
+  const agg={};
+  rows.forEach(r=>{
+    const k=r.ph+'||'+r.zone+'||'+r.gm+'||'+r.rm+'||'+r.am;
+    if(!agg[k])agg[k]={ph:r.ph,zone:r.zone,gm:r.gm,rm:r.rm,am:r.am,a:0,e:0,ar:0,d:0,t:0};
+    if(r.bucket===BA)agg[k].a+=r.cnt;
+    if(r.bucket===BE)agg[k].e+=r.cnt;
+    if(r.bucket===BR)agg[k].ar+=r.cnt;
+    if(r.bucket===BD)agg[k].d+=r.cnt;
+    agg[k].t+=r.cnt;
+  });
+
+  const ss=sortState[sec];
+  let ph=sortRows(Object.values(agg),ss.col,ss.asc,buckets);
+
+  const gt={a:0,e:0,ar:0,d:0,t:0};
+  ph.forEach(r=>['a','e','ar','d','t'].forEach(k=>gt[k]+=r[k]));
+
+  const tbl=document.getElementById('t'+sec);
+  if(!ph.length){tbl.innerHTML='<thead></thead><tbody><tr><td class="no-data" colspan="10">No data for this selection.</td></tr></tbody>';return;}
+
+  const sA=buckets.includes(BA),sE=buckets.includes(BE),sR=buckets.includes(BR),sD=buckets.includes(BD);
+  // col indices for sort
+  let colIdx=0;
+  const thC=(label,ci,cls)=>{
+    const s=ss.col===ci?(ss.asc?' sorted-asc':' sorted-desc'):'';
+    return '<th class="'+(cls||'')+s+'" onclick="doSort('+sec+','+ci+')">'+label+' <span class="si"></span></th>';
+  };
+  let numCI=5;
+  const th='<thead><tr>'+
+    thC('Hub',0)+thC('Zone',1)+thC('GM',2)+thC('RM',3)+thC('AM',4)+
+    (sA?thC('Attempt Breach',numCI++,'r'):'')+
+    (sE?thC('EKL Issue',numCI++,'r'):'')+
+    (sR?thC('Auto Reset',numCI++,'r'):'')+
+    (sD?thC('Dispatch Breach',numCI++,'r'):'')+
+    thC('Grand Total',numCI,'r')+
+    '</tr></thead>';
+
+  const zbadge=z=>'<span class="zbadge z-'+(z||'Unknown')+'">'+(z||'?')+'</span>';
+  const cs=d=>
+    (sA?'<td class="r">'+(d.a?N(d.a):'0')+'</td>':'')+
+    (sE?'<td class="r">'+(d.e?N(d.e):'0')+'</td>':'')+
+    (sR?'<td class="r">'+(d.ar?N(d.ar):'0')+'</td>':'')+
+    (sD?'<td class="r">'+(d.d?N(d.d):'0')+'</td>':'')+
+    '<td class="r" style="color:var(--blue);font-weight:700">'+N(d.t)+'</td>';
+
+  const colspan=5+[sA,sE,sR,sD].filter(Boolean).length+1;
+  let tb='<tbody>';
+  ph.forEach(r=>{
+    tb+='<tr>'+
+      '<td style="max-width:210px;overflow:hidden;text-overflow:ellipsis" title="'+r.ph+'">'+r.ph+'</td>'+
+      '<td>'+zbadge(r.zone)+'</td>'+
+      '<td style="font-size:11px;color:var(--muted)">'+r.gm+'</td>'+
+      '<td style="font-size:11px">'+r.rm+'</td>'+
+      '<td style="font-size:11px">'+r.am+'</td>'+
+      cs(r)+'</tr>';
+  });
+  tb+='<tr class="rt"><td colspan="5" style="font-weight:700">Grand Total</td>'+cs(gt)+'</tr></tbody>';
+  tbl.innerHTML=th+tb;
+}
+
+function doSort(sec,col){
+  const ss=sortState[sec];
+  if(ss.col===col) ss.asc=!ss.asc;
+  else{ss.col=col;ss.asc=col<5;} // text cols asc by default, num cols desc
+  renderSec(sec);
+}
+
+const N=v=>(v||0).toLocaleString();
+function setS(t,m){
+  const ic=t==='spin'?'<span class="spin"></span>':t==='ok'?'<span style="color:var(--green);font-weight:700">&#10003;</span>':'<span style="color:var(--red);font-weight:700">&#9888;</span>';
+  document.getElementById('sbar').innerHTML=ic+' '+m;
+}
+loadData();
+</script>
+</body>
+</html>
