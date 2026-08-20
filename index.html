@@ -17,6 +17,7 @@
   --amber:#D97706;
   --green:#059669;
   --purple:#7C3AED;
+  --teal:#0D9488;
   --border:#E2E8F0;
   --text:#1E293B;
   --muted:#64748B;
@@ -220,6 +221,7 @@ body{
 .kpi.k2{border-top-color:var(--purple)}
 .kpi.k3{border-top-color:var(--green)}
 .kpi.k4{border-top-color:var(--amber)}
+.kpi.k5{border-top-color:var(--teal)}
 
 .k-lbl{
   font-size:10px;
@@ -435,7 +437,7 @@ td.r{
 
 .sub-table{
   width:100%;
-  max-width:600px;
+  max-width:700px;
   background:#fff;
   border:1px solid var(--border);
   margin-top:6px;
@@ -679,34 +681,37 @@ let sortState = [
   {col:0,asc:true}
 ];
 
+/* Helper to format numbers with commas */
+function N(num) {
+  return (num || 0).toLocaleString();
+}
+
+/* Helper to update status bar message */
+function setS(type, msg) {
+  const sb = document.getElementById('sbar');
+  if (type === 'err') {
+    sb.innerHTML = '❌ <span style="color:var(--red);font-weight:600">' + msg + '</span>';
+  } else {
+    sb.innerHTML = msg;
+  }
+}
+
 
 /* =========================
    LOAD DATA
 ========================= */
 
 async function loadData(){
-
   try{
-
     const response = await fetch('data.json');
-
     if(!response.ok){
       throw new Error('HTTP ' + response.status);
     }
-
     const rows = await response.json();
-
     init(rows);
-
   }catch(e){
-
-    setS(
-      'err',
-      'Failed to load data.json: ' + e.message
-    );
-
+    setS('err', 'Failed to load data.json: ' + e.message);
   }
-
 }
 
 
@@ -715,13 +720,9 @@ async function loadData(){
 ========================= */
 
 function dv(s){
-
+  if(!s) return 0;
   const p = s.split('-');
-
-  return new Date(
-    p[2] + '-' + p[1] + '-' + p[0]
-  ).getTime();
-
+  return new Date(p[2] + '-' + p[1] + '-' + p[0]).getTime();
 }
 
 
@@ -730,12 +731,12 @@ function dv(s){
 ========================= */
 
 function init(rows){
+  RAW = rows.map(r => ({
+    ...r,
+    picked: r.total_picked || r.picked || r.picked_count || 0
+  }));
 
-  RAW = rows;
-
-  DATES = [
-    ...new Set(RAW.map(r => r.date))
-  ].sort((a,b) => dv(b) - dv(a));
+  DATES = [...new Set(RAW.map(r => r.date))].sort((a,b) => dv(b) - dv(a));
 
   selectedDates = new Set();
 
@@ -746,18 +747,9 @@ function init(rows){
     DATES[0];
 
   buildFilters();
-
   applyFilters();
 
-  setS(
-    'ok',
-    '✓ Ready — ' +
-    RAW.length.toLocaleString() +
-    ' records across ' +
-    DATES.length +
-    ' dates'
-  );
-
+  setS('ok', '✓ Ready — ' + RAW.length.toLocaleString() + ' records across ' + DATES.length + ' dates');
 }
 
 
@@ -766,165 +758,93 @@ function init(rows){
 ========================= */
 
 function buildDateList(){
-
-  const list =
-    document.getElementById('date-list');
-
+  const list = document.getElementById('date-list');
   list.innerHTML = '';
-
   const active = activeDates();
 
   DATES.forEach(d => {
-
-    const item =
-      document.createElement('label');
-
+    const item = document.createElement('label');
     item.className = 'date-item';
 
-    const chk =
-      document.createElement('input');
-
+    const chk = document.createElement('input');
     chk.type = 'checkbox';
     chk.value = d;
-
-    chk.checked =
-      selectedDates.size === 0 ||
-      active.has(d);
+    chk.checked = selectedDates.size === 0 || active.has(d);
 
     chk.onchange = () => {
-
       if(selectedDates.size === 0){
         selectedDates = new Set(DATES);
       }
-
       if(chk.checked){
         selectedDates.add(d);
       }else{
         selectedDates.delete(d);
       }
-
       if(selectedDates.size === DATES.length){
         selectedDates = new Set();
       }
-
       updateDateBtnLabel();
-
       applyFilters();
-
     };
 
     item.appendChild(chk);
-
-    item.appendChild(
-      document.createTextNode(d)
-    );
-
+    item.appendChild(document.createTextNode(d));
     list.appendChild(item);
-
   });
 
   updateDateBtnLabel();
-
 }
 
 
 function selectAllDates(){
-
   selectedDates = new Set();
-
   buildDateList();
-
   applyFilters();
-
 }
 
 
 function clearAllDates(){
-
-  selectedDates =
-    new Set(['__none__']);
-
+  selectedDates = new Set(['__none__']);
   buildDateList();
-
   applyFilters();
-
 }
 
 
 function updateDateBtnLabel(){
-
-  const lbl =
-    document.getElementById('date-btn-label');
-
+  const lbl = document.getElementById('date-btn-label');
   if(selectedDates.size === 0){
-
     lbl.textContent = 'All Dates';
-
   }else if(selectedDates.has('__none__')){
-
     lbl.textContent = 'None selected';
-
   }else if(selectedDates.size === 1){
-
-    lbl.textContent =
-      [...selectedDates][0];
-
+    lbl.textContent = [...selectedDates][0];
   }else{
-
-    lbl.textContent =
-      selectedDates.size +
-      ' dates selected';
-
+    lbl.textContent = selectedDates.size + ' dates selected';
   }
-
 }
 
 
 function toggleDateDD(e){
-
   e.stopPropagation();
-
-  document
-    .getElementById('date-dd')
-    .classList
-    .toggle('open');
-
+  document.getElementById('date-dd').classList.toggle('open');
 }
 
 
-document.addEventListener(
-  'click',
-  e => {
-
-    if(
-      !document
-        .getElementById('date-fg')
-        .contains(e.target)
-    ){
-
-      document
-        .getElementById('date-dd')
-        .classList
-        .remove('open');
-
-    }
-
+document.addEventListener('click', e => {
+  if(!document.getElementById('date-fg').contains(e.target)){
+    document.getElementById('date-dd').classList.remove('open');
   }
-);
+});
 
 
 function activeDates(){
-
   if(selectedDates.size === 0){
     return new Set(DATES);
   }
-
   if(selectedDates.has('__none__')){
     return new Set();
   }
-
   return selectedDates;
-
 }
 
 
@@ -933,11 +853,7 @@ function activeDates(){
 ========================= */
 
 function buildFilters(){
-
-  const uniq = k =>
-    [...new Set(
-      RAW.map(r => r[k]).filter(Boolean)
-    )].sort();
+  const uniq = k => [...new Set(RAW.map(r => r[k]).filter(Boolean))].sort();
 
   pop('f-zone',uniq('zone'));
   pop('f-gm',uniq('gm'));
@@ -946,65 +862,39 @@ function buildFilters(){
   pop('f-ph',uniq('ph'));
 
   buildDateList();
-
 }
 
 
 function pop(id,vals){
-
-  const el =
-    document.getElementById(id);
-
-  el.innerHTML =
-    '<option value="">All</option>';
+  const el = document.getElementById(id);
+  el.innerHTML = '<option value="">All</option>';
 
   vals.forEach(v => {
-
-    const o =
-      document.createElement('option');
-
+    const o = document.createElement('option');
     o.value = v;
     o.textContent = v;
-
     el.appendChild(o);
-
   });
-
 }
 
 
-const fv = id =>
-  document.getElementById(id).value;
+const fv = id => document.getElementById(id).value;
 
 
 function resetFilters(){
+  ['f-zone','f-gm','f-rm','f-am','f-ph'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
 
-  [
-    'f-zone',
-    'f-gm',
-    'f-rm',
-    'f-am',
-    'f-ph'
-  ].forEach(
-    id => {
-      document.getElementById(id).value = '';
-    }
-  );
-
-  document.getElementById('f-type').value =
-    'all';
-
+  document.getElementById('f-type').value = 'all';
   selectedDates = new Set();
 
   buildDateList();
-
   applyFilters();
-
 }
 
 
 function applyFilters(){
-
   const zone = fv('f-zone');
   const gm = fv('f-gm');
   const rm = fv('f-rm');
@@ -1015,28 +905,18 @@ function applyFilters(){
   const ad = activeDates();
 
   filtered = RAW.filter(r =>
-
     ad.has(r.date) &&
-
     (!zone || r.zone === zone) &&
     (!gm || r.gm === gm) &&
     (!rm || r.rm === rm) &&
     (!am || r.am === am) &&
     (!ph || r.ph === ph) &&
-
-    (
-      type !== 'cpd' ||
-      r.cpd
-    )
-
+    (type !== 'cpd' || r.cpd)
   );
 
   renderKPIs();
-
   renderCharts();
-
   renderAll();
-
 }
 
 
@@ -1045,20 +925,11 @@ function applyFilters(){
 ========================= */
 
 function datesForN(n){
-
-  const available =
-    DATES.filter(
-      d => activeDates().has(d)
-    );
-
+  const available = DATES.filter(d => activeDates().has(d));
   if(n === 999){
     return new Set(available);
   }
-
-  return new Set(
-    available.slice(0,n)
-  );
-
+  return new Set(available.slice(0,n));
 }
 
 
@@ -1067,59 +938,36 @@ function datesForN(n){
 ========================= */
 
 function setKpiP(days,el){
-
   kpiPeriod = days;
-
-  document
-    .getElementById('tp-kpi')
-    .querySelectorAll('.pt')
-    .forEach(
-      t => t.classList.remove('on')
-    );
-
+  document.getElementById('tp-kpi').querySelectorAll('.pt').forEach(t => t.classList.remove('on'));
   el.classList.add('on');
 
   renderKPIs();
-
   renderCharts();
-
 }
 
 
 function renderKPIs(){
-
-  const ds =
-    datesForN(kpiPeriod);
-
-  const rows =
-    filtered.filter(
-      r => ds.has(r.date)
-    );
+  const ds = datesForN(kpiPeriod);
+  const rows = filtered.filter(r => ds.has(r.date));
 
   const cnt = buckets =>
-    rows
-      .filter(
-        r => buckets.includes(r.bucket)
-      )
-      .reduce(
-        (sum,r) => sum + r.cnt,
-        0
-      );
+    rows.filter(r => buckets.includes(r.bucket))
+        .reduce((sum,r) => sum + (r.cnt || 0), 0);
 
-  const label =
-    kpiPeriod === 1
-      ? 'D-1'
-      : kpiPeriod === 999
-        ? 'Overall'
-        : 'Last ' +
-          kpiPeriod +
-          ' Days';
+  const pickedCount = rows.reduce((sum,r) => sum + (r.picked || 0), 0);
+
+  const label = kpiPeriod === 1 ? 'D-1' : kpiPeriod === 999 ? 'Overall' : 'Last ' + kpiPeriod + ' Days';
 
   document.getElementById('kpi-bar').innerHTML =
-
     '<div class="kpi k0">' +
-      '<div class="k-lbl">Total (' + label + ')</div>' +
+      '<div class="k-lbl">Total Breaches (' + label + ')</div>' +
       '<div class="k-val">' + N(cnt(ALL)) + '</div>' +
+    '</div>' +
+
+    '<div class="kpi k5">' +
+      '<div class="k-lbl">Picked Count</div>' +
+      '<div class="k-val">' + N(pickedCount) + '</div>' +
     '</div>' +
 
     '<div class="kpi k1">' +
@@ -1141,7 +989,6 @@ function renderKPIs(){
       '<div class="k-lbl">Dispatch Breach</div>' +
       '<div class="k-val">' + N(cnt([BD])) + '</div>' +
     '</div>';
-
 }
 
 
@@ -1150,168 +997,67 @@ function renderKPIs(){
 ========================= */
 
 function renderCharts(){
+  const ds = datesForN(kpiPeriod);
+  const rows = filtered.filter(r => ds.has(r.date));
 
-  const ds =
-    datesForN(kpiPeriod);
-
-  const rows =
-    filtered.filter(
-      r => ds.has(r.date)
-    );
-
-  const tDates =
-    [...new Set(
-      rows.map(r => r.date)
-    )].sort(
-      (a,b) => dv(a) - dv(b)
-    );
+  const tDates = [...new Set(rows.map(r => r.date))].sort((a,b) => dv(a) - dv(b));
 
   const getCount = (date,bucket) =>
-
-    rows
-      .filter(
-        r =>
-          r.date === date &&
-          r.bucket === bucket
-      )
-      .reduce(
-        (sum,r) => sum + r.cnt,
-        0
-      );
-
+    rows.filter(r => r.date === date && r.bucket === bucket)
+        .reduce((sum,r) => sum + (r.cnt || 0), 0);
 
   if(chartTrend){
     chartTrend.destroy();
   }
 
-
   chartTrend = new Chart(
-    document
-      .getElementById('chart-trend')
-      .getContext('2d'),
+    document.getElementById('chart-trend').getContext('2d'),
     {
       type:'bar',
-
       data:{
         labels:tDates,
-
         datasets:[
-
-          {
-            label:'Attempt',
-            data:tDates.map(
-              d => getCount(d,BA)
-            ),
-            backgroundColor:'#DC2626',
-            stack:'s'
-          },
-
-          {
-            label:'EKL',
-            data:tDates.map(
-              d => getCount(d,BE)
-            ),
-            backgroundColor:'#7C3AED',
-            stack:'s'
-          },
-
-          {
-            label:'Auto Reset',
-            data:tDates.map(
-              d => getCount(d,BR)
-            ),
-            backgroundColor:'#059669',
-            stack:'s'
-          },
-
-          {
-            label:'Dispatch',
-            data:tDates.map(
-              d => getCount(d,BD)
-            ),
-            backgroundColor:'#D97706',
-            stack:'s'
-          }
-
+          { label:'Attempt', data:tDates.map(d => getCount(d,BA)), backgroundColor:'#DC2626', stack:'s' },
+          { label:'EKL', data:tDates.map(d => getCount(d,BE)), backgroundColor:'#7C3AED', stack:'s' },
+          { label:'Auto Reset', data:tDates.map(d => getCount(d,BR)), backgroundColor:'#059669', stack:'s' },
+          { label:'Dispatch', data:tDates.map(d => getCount(d,BD)), backgroundColor:'#D97706', stack:'s' }
         ]
       },
-
       options:{
         responsive:true,
         maintainAspectRatio:false,
-
-        plugins:{
-          legend:{
-            position:'bottom'
-          }
-        }
+        plugins:{ legend:{ position:'bottom' } }
       }
     }
   );
 
-
-  const mix =
-    [BA,BE,BR,BD].map(
-      bucket =>
-
-        rows
-          .filter(
-            r => r.bucket === bucket
-          )
-          .reduce(
-            (sum,r) => sum + r.cnt,
-            0
-          )
-    );
-
+  const mix = [BA,BE,BR,BD].map(bucket =>
+    rows.filter(r => r.bucket === bucket)
+        .reduce((sum,r) => sum + (r.cnt || 0), 0)
+  );
 
   if(chartMix){
     chartMix.destroy();
   }
 
-
   chartMix = new Chart(
-    document
-      .getElementById('chart-mix')
-      .getContext('2d'),
+    document.getElementById('chart-mix').getContext('2d'),
     {
       type:'doughnut',
-
       data:{
-        labels:[
-          'Attempt',
-          'EKL Issue',
-          'Auto Reset',
-          'Dispatch'
-        ],
-
-        datasets:[
-          {
-            data:mix,
-
-            backgroundColor:[
-              '#DC2626',
-              '#7C3AED',
-              '#059669',
-              '#D97706'
-            ]
-          }
-        ]
+        labels:['Attempt', 'EKL Issue', 'Auto Reset', 'Dispatch'],
+        datasets:[{
+          data:mix,
+          backgroundColor:['#DC2626', '#7C3AED', '#059669', '#D97706']
+        }]
       },
-
       options:{
         responsive:true,
         maintainAspectRatio:false,
-
-        plugins:{
-          legend:{
-            position:'bottom'
-          }
-        }
+        plugins:{ legend:{ position:'bottom' } }
       }
     }
   );
-
 }
 
 
@@ -1320,29 +1066,15 @@ function renderCharts(){
 ========================= */
 
 function setP(sec,days,el){
-
   periods[sec] = days;
-
-  document
-    .getElementById('tp' + sec)
-    .querySelectorAll('.pt')
-    .forEach(
-      t => t.classList.remove('on')
-    );
-
+  document.getElementById('tp' + sec).querySelectorAll('.pt').forEach(t => t.classList.remove('on'));
   el.classList.add('on');
-
   renderSec(sec);
-
 }
 
 
 function renderAll(){
-
-  [0,1,2].forEach(
-    i => renderSec(i)
-  );
-
+  [0,1,2].forEach(i => renderSec(i));
 }
 
 
@@ -1351,7 +1083,6 @@ function renderAll(){
 ========================= */
 
 function sortRows(rows,col,asc,buckets){
-
   const sA = buckets.includes(BA);
   const sE = buckets.includes(BE);
   const sR = buckets.includes(BR);
@@ -1364,40 +1095,27 @@ function sortRows(rows,col,asc,buckets){
   else if(col === 2) key = 'gm';
   else if(col === 3) key = 'rm';
   else if(col === 4) key = 'am';
+  else if(col === 5) key = 'p'; // Picked Count column
   else{
-
     const numericKeys = [];
-
     if(sA) numericKeys.push('a');
     if(sE) numericKeys.push('e');
     if(sR) numericKeys.push('ar');
     if(sD) numericKeys.push('d');
-
     numericKeys.push('t');
 
-    key = numericKeys[col - 5] || 't';
-
+    key = numericKeys[col - 6] || 't';
   }
 
   return [...rows].sort((a,b) => {
-
     const av = a[key];
     const bv = b[key];
 
     if(typeof av === 'string'){
-
-      return asc
-        ? av.localeCompare(bv)
-        : bv.localeCompare(av);
-
+      return asc ? av.localeCompare(bv) : bv.localeCompare(av);
     }
-
-    return asc
-      ? av - bv
-      : bv - av;
-
+    return asc ? av - bv : bv - av;
   });
-
 }
 
 
@@ -1406,511 +1124,219 @@ function sortRows(rows,col,asc,buckets){
 ========================= */
 
 function renderSec(sec){
+  const buckets = sec === 0 ? ALL : sec === 1 ? PICKUP : [BD];
+  const ds = datesForN(periods[sec]);
+  const periodDays = ds.size || 1;
+  const showAverage = periodDays > 1;
 
-  const buckets =
-    sec === 0
-      ? ALL
-      : sec === 1
-        ? PICKUP
-        : [BD];
-
-  const ds =
-    datesForN(periods[sec]);
-
-  const periodDays =
-    ds.size || 1;
-
-  const showAverage =
-    periodDays > 1;
-
-  const rows =
-    filtered.filter(
-      r =>
-        ds.has(r.date) &&
-        buckets.includes(r.bucket)
-    );
-
+  const rows = filtered.filter(r => ds.has(r.date) && buckets.includes(r.bucket));
   const agg = {};
 
-
   rows.forEach(r => {
-
-    const key =
-      r.ph + '||' +
-      r.zone + '||' +
-      r.gm + '||' +
-      r.rm + '||' +
-      r.am;
+    const key = r.ph + '||' + r.zone + '||' + r.gm + '||' + r.rm + '||' + r.am;
 
     if(!agg[key]){
-
       agg[key] = {
         ph:r.ph,
         zone:r.zone,
         gm:r.gm,
         rm:r.rm,
         am:r.am,
-
+        p:0,
         a:0,
         e:0,
         ar:0,
         d:0,
         t:0,
-
         byDate:{}
       };
-
     }
 
     if(!agg[key].byDate[r.date]){
-
       agg[key].byDate[r.date] = {
+        p:0,
         a:0,
         e:0,
         ar:0,
         d:0,
         t:0
       };
-
     }
 
+    const countVal = r.cnt || 0;
+    const pickedVal = r.picked || 0;
+
+    agg[key].p += pickedVal;
+    agg[key].byDate[r.date].p += pickedVal;
+
     if(r.bucket === BA){
-      agg[key].a += r.cnt;
-      agg[key].byDate[r.date].a += r.cnt;
+      agg[key].a += countVal;
+      agg[key].byDate[r.date].a += countVal;
     }
 
     if(r.bucket === BE){
-      agg[key].e += r.cnt;
-      agg[key].byDate[r.date].e += r.cnt;
+      agg[key].e += countVal;
+      agg[key].byDate[r.date].e += countVal;
     }
 
     if(r.bucket === BR){
-      agg[key].ar += r.cnt;
-      agg[key].byDate[r.date].ar += r.cnt;
+      agg[key].ar += countVal;
+      agg[key].byDate[r.date].ar += countVal;
     }
 
     if(r.bucket === BD){
-      agg[key].d += r.cnt;
-      agg[key].byDate[r.date].d += r.cnt;
+      agg[key].d += countVal;
+      agg[key].byDate[r.date].d += countVal;
     }
 
-    agg[key].t += r.cnt;
-    agg[key].byDate[r.date].t += r.cnt;
-
+    agg[key].t += countVal;
+    agg[key].byDate[r.date].t += countVal;
   });
 
+  const ss = sortState[sec];
+  const hubRows = sortRows(Object.values(agg), ss.col, ss.asc, buckets);
 
-  const ss =
-    sortState[sec];
-
-  const hubRows =
-    sortRows(
-      Object.values(agg),
-      ss.col,
-      ss.asc,
-      buckets
-    );
-
-
-  const gt = {
-    a:0,
-    e:0,
-    ar:0,
-    d:0,
-    t:0
-  };
+  const gt = { p:0, a:0, e:0, ar:0, d:0, t:0 };
 
   hubRows.forEach(r => {
-
+    gt.p += r.p;
     gt.a += r.a;
     gt.e += r.e;
     gt.ar += r.ar;
     gt.d += r.d;
     gt.t += r.t;
-
   });
 
-
-  const tbl =
-    document.getElementById(
-      't' + sec
-    );
-
+  const tbl = document.getElementById('t' + sec);
 
   if(!hubRows.length){
-
-    tbl.innerHTML =
-      '<tbody>' +
-        '<tr>' +
-          '<td class="no-data">No data for this selection.</td>' +
-        '</tr>' +
-      '</tbody>';
-
+    tbl.innerHTML = '<tbody><tr><td class="no-data">No data for this selection.</td></tr></tbody>';
     return;
-
   }
-
 
   const sA = buckets.includes(BA);
   const sE = buckets.includes(BE);
   const sR = buckets.includes(BR);
   const sD = buckets.includes(BD);
 
-
-  /* HEADER FUNCTION - FIXED */
-
   const thC = (label,ci,cls='') => {
-
-    const sortedClass =
-      ss.col === ci
-        ? (
-            ss.asc
-              ? ' sorted-asc'
-              : ' sorted-desc'
-          )
-        : '';
-
-    return '<th class="' +
-      cls +
-      sortedClass +
-      '" onclick="doSort(' +
-      sec +
-      ',' +
-      ci +
-      ')">' +
-      label +
-      ' <span class="si"></span>' +
-      '</th>';
-
+    const sortedClass = ss.col === ci ? (ss.asc ? ' sorted-asc' : ' sorted-desc') : '';
+    return '<th class="' + cls + sortedClass + '" onclick="doSort(' + sec + ',' + ci + ')">' +
+      label + ' <span class="si"></span></th>';
   };
 
-
-  const prefix =
-    showAverage
-      ? 'Avg '
-      : '';
-
-
+  const prefix = showAverage ? 'Avg ' : '';
   let numCI = 5;
-
 
   let header =
     '<thead><tr>' +
-
     thC('Hub',0) +
     thC('Zone',1) +
     thC('GM',2) +
     thC('RM',3) +
-    thC('AM',4);
+    thC('AM',4) +
+    thC(prefix + 'Picked Count', numCI++, 'r');
 
+  if(sA) header += thC(prefix + 'Attempt Breach', numCI++, 'r');
+  if(sE) header += thC(prefix + 'EKL Issue', numCI++, 'r');
+  if(sR) header += thC(prefix + 'Auto Reset', numCI++, 'r');
+  if(sD) header += thC(prefix + 'Dispatch Breach', numCI++, 'r');
 
-  if(sA){
-    header += thC(
-      prefix + 'Attempt Breach',
-      numCI++,
-      'r'
-    );
-  }
+  header += thC(showAverage ? 'Avg Daily Total' : 'Grand Total', numCI, 'r');
+  header += '</tr></thead>';
 
-  if(sE){
-    header += thC(
-      prefix + 'EKL Issue',
-      numCI++,
-      'r'
-    );
-  }
-
-  if(sR){
-    header += thC(
-      prefix + 'Auto Reset',
-      numCI++,
-      'r'
-    );
-  }
-
-  if(sD){
-    header += thC(
-      prefix + 'Dispatch Breach',
-      numCI++,
-      'r'
-    );
-  }
-
-  header += thC(
-    showAverage
-      ? 'Avg Daily Total'
-      : 'Grand Total',
-    numCI,
-    'r'
-  );
-
-  header +=
-    '</tr></thead>';
-
-
-  const zbadge = z =>
-
-    '<span class="zbadge z-' +
-    (z || 'Unknown') +
-    '">' +
-    (z || '?') +
-    '</span>';
-
+  const zbadge = z => '<span class="zbadge z-' + (z || 'Unknown') + '">' + (z || '?') + '</span>';
 
   const formatValue = value => {
-
     if(showAverage){
-
-      return (value / periodDays)
-        .toLocaleString(
-          undefined,
-          {
-            minimumFractionDigits:1,
-            maximumFractionDigits:1
-          }
-        );
-
+      return (value / periodDays).toLocaleString(undefined, {
+        minimumFractionDigits:1,
+        maximumFractionDigits:1
+      });
     }
-
     return N(value);
-
   };
-
 
   const cells = d => {
+    let html = '<td class="r" style="color:var(--teal);font-weight:700">' + formatValue(d.p) + '</td>';
 
-    let html = '';
+    if(sA) html += '<td class="r">' + formatValue(d.a) + '</td>';
+    if(sE) html += '<td class="r">' + formatValue(d.e) + '</td>';
+    if(sR) html += '<td class="r">' + formatValue(d.ar) + '</td>';
+    if(sD) html += '<td class="r">' + formatValue(d.d) + '</td>';
 
-    if(sA){
-      html +=
-        '<td class="r">' +
-        formatValue(d.a) +
-        '</td>';
-    }
-
-    if(sE){
-      html +=
-        '<td class="r">' +
-        formatValue(d.e) +
-        '</td>';
-    }
-
-    if(sR){
-      html +=
-        '<td class="r">' +
-        formatValue(d.ar) +
-        '</td>';
-    }
-
-    if(sD){
-      html +=
-        '<td class="r">' +
-        formatValue(d.d) +
-        '</td>';
-    }
-
-    html +=
-      '<td class="r" style="color:var(--blue);font-weight:700">' +
-      formatValue(d.t) +
-      '</td>';
-
+    html += '<td class="r" style="color:var(--blue);font-weight:700">' + formatValue(d.t) + '</td>';
     return html;
-
   };
 
-
-  const totalCols =
-    5 +
-    [sA,sE,sR,sD].filter(Boolean).length +
-    1;
-
+  const totalCols = 6 + [sA,sE,sR,sD].filter(Boolean).length + 1;
 
   let body = '<tbody>';
 
-
   hubRows.forEach((r,index) => {
+    const subId = 'sub-' + sec + '-' + index;
+    const btnId = 'btn-' + sec + '-' + index;
 
-    const subId =
-      'sub-' + sec + '-' + index;
-
-    const btnId =
-      'btn-' + sec + '-' + index;
-
-
-    const dateList =
-      Object.keys(r.byDate)
-      .sort(
-        (a,b) => dv(b) - dv(a)
-      );
-
-
+    const dateList = Object.keys(r.byDate).sort((a,b) => dv(b) - dv(a));
     let dateRows = '';
 
-
     dateList.forEach(date => {
-
-      const data =
-        r.byDate[date];
-
+      const data = r.byDate[date];
       dateRows +=
         '<tr>' +
+        '<td style="font-weight:600;color:var(--navy2)">' + date + '</td>' +
+        '<td class="r" style="color:var(--teal);font-weight:700">' + N(data.p) + '</td>';
 
-        '<td style="font-weight:600;color:var(--navy2)">' +
-        date +
-        '</td>';
+      if(sA) dateRows += '<td class="r">' + N(data.a) + '</td>';
+      if(sE) dateRows += '<td class="r">' + N(data.e) + '</td>';
+      if(sR) dateRows += '<td class="r">' + N(data.ar) + '</td>';
+      if(sD) dateRows += '<td class="r">' + N(data.d) + '</td>';
 
-      if(sA){
-        dateRows +=
-          '<td class="r">' +
-          N(data.a) +
-          '</td>';
-      }
-
-      if(sE){
-        dateRows +=
-          '<td class="r">' +
-          N(data.e) +
-          '</td>';
-      }
-
-      if(sR){
-        dateRows +=
-          '<td class="r">' +
-          N(data.ar) +
-          '</td>';
-      }
-
-      if(sD){
-        dateRows +=
-          '<td class="r">' +
-          N(data.d) +
-          '</td>';
-      }
-
-      dateRows +=
-        '<td class="r" style="color:var(--blue);font-weight:700">' +
-        N(data.t) +
-        '</td>' +
-
-        '</tr>';
-
+      dateRows += '<td class="r" style="color:var(--blue);font-weight:700">' + N(data.t) + '</td></tr>';
     });
 
-
     body +=
-
       '<tr>' +
-
       '<td style="max-width:230px;overflow:hidden;text-overflow:ellipsis">' +
-
-      '<span id="' +
-      btnId +
-      '" class="expand-btn" onclick="toggleHubSubRow(\'' +
-      subId +
-      '\',\'' +
-      btnId +
-      '\')">▶</span>' +
-
-      '<strong style="cursor:pointer" onclick="toggleHubSubRow(\'' +
-      subId +
-      '\',\'' +
-      btnId +
-      '\')">' +
-      r.ph +
-      '</strong>' +
-
+      '<span id="' + btnId + '" class="expand-btn" onclick="toggleHubSubRow(\'' + subId + '\',\'' + btnId + '\')">▶</span>' +
+      '<strong style="cursor:pointer" onclick="toggleHubSubRow(\'' + subId + '\',\'' + btnId + '\')">' + r.ph + '</strong>' +
       '</td>' +
-
-      '<td>' +
-      zbadge(r.zone) +
-      '</td>' +
-
-      '<td>' +
-      r.gm +
-      '</td>' +
-
-      '<td>' +
-      r.rm +
-      '</td>' +
-
-      '<td>' +
-      r.am +
-      '</td>' +
-
+      '<td>' + zbadge(r.zone) + '</td>' +
+      '<td>' + r.gm + '</td>' +
+      '<td>' + r.rm + '</td>' +
+      '<td>' + r.am + '</td>' +
       cells(r) +
-
       '</tr>' +
 
-
-      '<tr id="' +
-      subId +
-      '" style="display:none;background:#f8fafc">' +
-
-      '<td colspan="' +
-      totalCols +
-      '" style="padding:4px 16px 12px 28px">' +
-
+      '<tr id="' + subId + '" style="display:none;background:#f8fafc">' +
+      '<td colspan="' + totalCols + '" style="padding:4px 16px 12px 28px">' +
       '<div class="sub-table-container">' +
-
-      '<div style="font-weight:700;font-size:11px;color:var(--navy2)">' +
-      '📅 Date-wise Breakdown for ' +
-      r.ph +
-      '</div>' +
-
+      '<div style="font-weight:700;font-size:11px;color:var(--navy2)">📅 Date-wise Breakdown for ' + r.ph + '</div>' +
       '<table class="sub-table">' +
-
       '<thead><tr>' +
-
       '<th>Date</th>' +
-
+      '<th class="r">Picked Count</th>' +
       (sA ? '<th class="r">Attempt</th>' : '') +
       (sE ? '<th class="r">EKL</th>' : '') +
       (sR ? '<th class="r">Auto Reset</th>' : '') +
       (sD ? '<th class="r">Dispatch</th>' : '') +
-
       '<th class="r">Total</th>' +
-
       '</tr></thead>' +
-
-      '<tbody>' +
-      dateRows +
-      '</tbody>' +
-
+      '<tbody>' + dateRows + '</tbody>' +
       '</table>' +
-
       '</div>' +
-
       '</td>' +
-
       '</tr>';
-
   });
 
-
   body +=
-
     '<tr class="rt">' +
-
-    '<td colspan="5">' +
-
-    (
-      showAverage
-        ? 'Average Daily Total'
-        : 'Grand Total'
-    ) +
-
-    '</td>' +
-
+    '<td colspan="5">' + (showAverage ? 'Average Daily Total' : 'Grand Total') + '</td>' +
     cells(gt) +
-
     '</tr>' +
-
     '</tbody>';
 
-
-  tbl.innerHTML =
-    header + body;
-
+  tbl.innerHTML = header + body;
 }
 
 
@@ -1919,31 +1345,18 @@ function renderSec(sec){
 ========================= */
 
 function toggleHubSubRow(subId,btnId){
-
-  const row =
-    document.getElementById(subId);
-
-  const button =
-    document.getElementById(btnId);
+  const row = document.getElementById(subId);
+  const button = document.getElementById(btnId);
 
   if(!row) return;
 
   if(row.style.display === 'none'){
-
-    row.style.display =
-      'table-row';
-
+    row.style.display = 'table-row';
     button.innerHTML = '▼';
-
   }else{
-
-    row.style.display =
-      'none';
-
+    row.style.display = 'none';
     button.innerHTML = '▶';
-
   }
-
 }
 
 
@@ -1952,171 +1365,55 @@ function toggleHubSubRow(subId,btnId){
 ========================= */
 
 function doSort(sec,col){
-
-  const ss =
-    sortState[sec];
-
+  const ss = sortState[sec];
   if(ss.col === col){
-
     ss.asc = !ss.asc;
-
   }else{
-
     ss.col = col;
-
-    ss.asc =
-      col < 5;
-
+    ss.asc = col < 5;
   }
-
   renderSec(sec);
-
 }
 
 
 /* =========================
-   NUMBER FORMAT
-========================= */
-
-const N = value =>
-  (value || 0).toLocaleString();
-
-
-/* =========================
-   STATUS
-========================= */
-
-function setS(type,message){
-
-  let icon;
-
-  if(type === 'spin'){
-
-    icon =
-      '<span class="spin"></span>';
-
-  }else if(type === 'ok'){
-
-    icon =
-      '<span style="color:var(--green);font-weight:700">✓</span>';
-
-  }else{
-
-    icon =
-      '<span style="color:var(--red);font-weight:700">⚠</span>';
-
-  }
-
-  document.getElementById('sbar').innerHTML =
-    icon + ' ' + message;
-
-}
-
-
-/* =========================
-   DOWNLOAD CSV
+   RAW CSV DOWNLOAD
 ========================= */
 
 function downloadRaw(){
-
-  if(!RAW.length){
-
-    alert('No data loaded yet.');
-
+  if(!filtered || !filtered.length){
+    alert('No data to export.');
     return;
-
   }
 
-  const src =
-    filtered.length
-      ? filtered
-      : RAW;
+  const keys = Object.keys(filtered[0]);
+  const csvRows = [];
 
-  const cols = [
-    'date',
-    'zone',
-    'gm',
-    'rm',
-    'am',
-    'ph',
-    'bucket',
-    'cpd',
-    'count'
-  ];
+  csvRows.push(keys.join(','));
 
-  const esc = value =>
-    '"' +
-    String(
-      value == null
-        ? ''
-        : value
-    ).replace(/"/g,'""') +
-    '"';
-
-  const lines =
-    [cols.join(',')];
-
-  src.forEach(r => {
-
-    lines.push(
-
-      [
-        esc(r.date),
-        esc(r.zone),
-        esc(r.gm),
-        esc(r.rm),
-        esc(r.am),
-        esc(r.ph),
-        esc(r.bucket),
-        r.cpd ? 'Yes' : 'No',
-        r.cnt
-      ].join(',')
-
-    );
-
+  filtered.forEach(row => {
+    const values = keys.map(k => {
+      const val = row[k] === null || row[k] === undefined ? '' : row[k];
+      return '"' + String(val).replace(/"/g, '""') + '"';
+    });
+    csvRows.push(values.join(','));
   });
 
-  const blob =
-    new Blob(
-      [lines.join('\r\n')],
-      {
-        type:'text/csv;charset=utf-8;'
-      }
-    );
+  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
 
-  const url =
-    URL.createObjectURL(blob);
-
-  const a =
-    document.createElement('a');
-
-  a.href = url;
-
-  a.download =
-    'FM_Breach_' +
-    new Date()
-      .toISOString()
-      .slice(0,10) +
-    '.csv';
-
-  document.body.appendChild(a);
-
-  a.click();
-
-  document.body.removeChild(a);
-
-  URL.revokeObjectURL(url);
-
+  link.setAttribute('href', url);
+  link.setAttribute('download', 'FM_Breach_Data_' + new Date().toISOString().slice(0,10) + '.csv');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 
-/* =========================
-   START
-========================= */
-
-loadData();
+/* Auto execute on load */
+window.addEventListener('DOMContentLoaded', loadData);
 
 </script>
-
 </body>
 </html>
