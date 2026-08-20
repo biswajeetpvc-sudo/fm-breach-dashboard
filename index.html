@@ -437,7 +437,7 @@ td.r{
 
 .sub-table{
   width:100%;
-  max-width:780px;
+  max-width:750px;
   background:#fff;
   border:1px solid var(--border);
   margin-top:6px;
@@ -1021,7 +1021,7 @@ function renderAll(){
   [0,1,2].forEach(i => renderSec(i));
 }
 
-function sortRows(rows,col,asc,buckets){
+function sortRows(rows,col,asc,buckets,periodDays){
   const sA = buckets.includes(BA);
   const sE = buckets.includes(BE);
   const sR = buckets.includes(BR);
@@ -1043,13 +1043,22 @@ function sortRows(rows,col,asc,buckets){
     if(sD) numericKeys.push('d');
     numericKeys.push('t');
     numericKeys.push('bp');
+    numericKeys.push('sugg');
 
     key = numericKeys[col - 6] || 't';
   }
 
+  const getSuggVal = r => {
+    const avgPickup = ((r.a || 0) + (r.e || 0) + (r.ar || 0)) / (periodDays || 1);
+    const avgDispatch = (r.d || 0) / (periodDays || 1);
+    return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
+  };
+
   return [...rows].sort((a,b) => {
-    let av = key === 'bp' ? (a.p ? (a.t / a.p) : 0) : a[key];
-    let bv = key === 'bp' ? (b.p ? (b.t / b.p) : 0) : b[key];
+    let av = key === 'bp' ? (a.p ? (a.t / a.p) : 0) :
+             key === 'sugg' ? getSuggVal(a) : a[key];
+    let bv = key === 'bp' ? (b.p ? (b.t / b.p) : 0) :
+             key === 'sugg' ? getSuggVal(b) : b[key];
 
     if(typeof av === 'string'){
       return asc ? av.localeCompare(bv) : bv.localeCompare(av);
@@ -1129,7 +1138,7 @@ function renderSec(sec){
   });
 
   const ss = sortState[sec];
-  const hubRows = sortRows(Object.values(agg), ss.col, ss.asc, buckets);
+  const hubRows = sortRows(Object.values(agg), ss.col, ss.asc, buckets, periodDays);
 
   const gt = { p:0, a:0, e:0, ar:0, d:0, t:0 };
 
@@ -1179,6 +1188,7 @@ function renderSec(sec){
 
   header += thC(showAverage ? 'Avg Daily Total' : 'Grand Total', numCI++, 'r');
   header += thC(prefix + 'Breach %', numCI++, 'r');
+  header += thC('Suggestion', numCI++);
   header += '</tr></thead>';
 
   const zbadge = z => '<span class="zbadge z-' + (z || 'Unknown') + '">' + (z || '?') + '</span>';
@@ -1203,10 +1213,20 @@ function renderSec(sec){
 
     html += '<td class="r" style="color:var(--blue);font-weight:700">' + formatValue(d.t) + '</td>';
     html += '<td class="r" style="color:var(--red);font-weight:700">' + pct(d.t, d.p) + '</td>';
+
+    const avgPickup = ((d.a || 0) + (d.e || 0) + (d.ar || 0)) / periodDays;
+    const avgDispatch = (d.d || 0) / periodDays;
+
+    const suggestion = avgPickup >= avgDispatch
+      ? 'Take 24 hrs buffer'
+      : 'Take 4 hrs buffer';
+
+    html += '<td style="font-weight:600;color:var(--navy2)">' + suggestion + '</td>';
+
     return html;
   };
 
-  const totalCols = 6 + [sA,sE,sR,sD].filter(Boolean).length + 2;
+  const totalCols = 6 + [sA,sE,sR,sD].filter(Boolean).length + 3;
 
   let body = '<tbody>';
 
@@ -1219,6 +1239,7 @@ function renderSec(sec){
 
     dateList.forEach(date => {
       const data = r.byDate[date];
+
       dateRows +=
         '<tr>' +
         '<td style="font-weight:600;color:var(--navy2)">' + date + '</td>' +
