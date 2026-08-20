@@ -555,12 +555,21 @@ td.r{
     Summary
   </span>
 
-  <div class="ptabs" id="tp-kpi">
-    <div class="pt on" onclick="setKpiP(1,this)">D-1</div>
-    <div class="pt" onclick="setKpiP(3,this)">Last 3 Days</div>
-    <div class="pt" onclick="setKpiP(5,this)">Last 5 Days</div>
-    <div class="pt" onclick="setKpiP(7,this)">Last 7 Days</div>
-    <div class="pt" onclick="setKpiP(999,this)">Overall</div>
+  <div style="display:flex;gap:12px;align-items:center;">
+    <!-- Average vs Absolute Toggle (Summary Only) -->
+    <div class="ptabs" id="tp-kpi-mode">
+      <div class="pt on" onclick="setKpiMode('avg',this)">Average</div>
+      <div class="pt" onclick="setKpiMode('abs',this)">Absolute</div>
+    </div>
+
+    <!-- KPI Period Selector -->
+    <div class="ptabs" id="tp-kpi">
+      <div class="pt on" onclick="setKpiP(1,this)">D-1</div>
+      <div class="pt" onclick="setKpiP(3,this)">Last 3 Days</div>
+      <div class="pt" onclick="setKpiP(5,this)">Last 5 Days</div>
+      <div class="pt" onclick="setKpiP(7,this)">Last 7 Days</div>
+      <div class="pt" onclick="setKpiP(999,this)">Overall</div>
+    </div>
   </div>
 
 </div>
@@ -668,6 +677,7 @@ let filtered = [];
 
 let periods = [1,1,1];
 let kpiPeriod = 1;
+let kpiMode = 'avg'; // Summary KPI mode: 'avg' or 'abs'
 
 let selectedDates = new Set();
 
@@ -893,6 +903,14 @@ function datesForN(n){
   return new Set(available.slice(0,n));
 }
 
+function setKpiMode(mode, el){
+  kpiMode = mode;
+  document.getElementById('tp-kpi-mode').querySelectorAll('.pt').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+
+  renderKPIs();
+}
+
 function setKpiP(days,el){
   kpiPeriod = days;
   document.getElementById('tp-kpi').querySelectorAll('.pt').forEach(t => t.classList.remove('on'));
@@ -904,55 +922,67 @@ function setKpiP(days,el){
 
 function renderKPIs(){
   const ds = datesForN(kpiPeriod);
+  const periodDays = ds.size || 1;
+  const isAvg = kpiMode === 'avg' && periodDays > 1;
+
   const rows = filtered.filter(r => ds.has(r.date));
 
-  const cnt = buckets =>
-    rows.filter(r => buckets.includes(r.bucket))
-        .reduce((sum,r) => sum + (r.cnt || 0), 0);
+  const cnt = buckets => {
+    const sum = rows.filter(r => buckets.includes(r.bucket))
+                    .reduce((total, r) => total + (r.cnt || 0), 0);
+    return isAvg ? (sum / periodDays) : sum;
+  };
 
   // Deduplicate picked count per Hub + Date to avoid overcounting across buckets
   const seenHubDates = new Set();
-  let pickedCount = 0;
+  let pickedSum = 0;
 
   rows.forEach(r => {
     const key = (r.ph || '') + '||' + r.date;
     if (!seenHubDates.has(key)) {
       seenHubDates.add(key);
-      pickedCount += (r.picked || 0);
+      pickedSum += (r.picked || 0);
     }
   });
 
-  const label = kpiPeriod === 1 ? 'D-1' : kpiPeriod === 999 ? 'Overall' : 'Last ' + kpiPeriod + ' Days';
+  const finalPicked = isAvg ? (pickedSum / periodDays) : pickedSum;
+
+  const periodLabel = kpiPeriod === 1 ? 'D-1' : kpiPeriod === 999 ? 'Overall' : 'Last ' + kpiPeriod + ' Days';
+  const modeLabel = isAvg ? 'Avg Daily ' : '';
+
+  const fmt = val => isAvg 
+    ? val.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    : N(val);
 
   document.getElementById('kpi-bar').innerHTML =
     '<div class="kpi k0">' +
-      '<div class="k-lbl">Total Breaches (' + label + ')</div>' +
-      '<div class="k-val">' + N(cnt(ALL)) + '</div>' +
+      '<div class="k-lbl">' + modeLabel + 'Total Breaches (' + periodLabel + ')</div>' +
+      '<div class="k-val">' + fmt(cnt(ALL)) + '</div>' +
     '</div>' +
 
     '<div class="kpi k5">' +
-      '<div class="k-lbl">Picked Count</div>' +
-      '<div class="k-val">' + N(pickedCount) + '</div>' +
+      '<div class="k-lbl">' + modeLabel + 'Picked Count</div>' +
+      '<div class="k-val">' + fmt(finalPicked) + '</div>' +
     '</div>' +
 
     '<div class="kpi k1">' +
-      '<div class="k-lbl">Attempt Breach</div>' +
-      '<div class="k-val">' + N(cnt([BA])) + '</div>' +
+      '<div class="k-lbl">' + modeLabel + 'Attempt Breach</div>' +
+      '<div class="k-val">' + fmt(cnt([BA])) + '</div>' +
     '</div>' +
 
     '<div class="kpi k2">' +
-      '<div class="k-lbl">EKL Issue</div>' +
-      '<div class="k-val">' + N(cnt([BE])) + '</div>' +
+      '<div class="k-lbl">' + modeLabel + 'EKL Issue</div>' +
+      '<div class="k-val">' + fmt(cnt([BE])) + '</div>' +
     '</div>' +
 
     '<div class="kpi k3">' +
-      '<div class="k-lbl">Auto Reset</div>' +
-      '<div class="k-val">' + N(cnt([BR])) + '</div>' +
+      '<div class="k-lbl">' + modeLabel + 'Auto Reset</div>' +
+      '<div class="k-val">' + fmt(cnt([BR])) + '</div>' +
     '</div>' +
 
     '<div class="kpi k4">' +
-      '<div class="k-lbl">Dispatch Breach</div>' +
-      '<div class="k-val">' + N(cnt([BD])) + '</div>' +
+      '<div class="k-lbl">' + modeLabel + 'Dispatch Breach</div>' +
+      '<div class="k-val">' + fmt(cnt([BD])) + '</div>' +
     '</div>';
 }
 
