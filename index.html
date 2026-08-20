@@ -910,7 +910,17 @@ function renderKPIs(){
     rows.filter(r => buckets.includes(r.bucket))
         .reduce((sum,r) => sum + (r.cnt || 0), 0);
 
-  const pickedCount = rows.reduce((sum,r) => sum + (r.picked || 0), 0);
+  // Deduplicate picked count per Hub + Date to avoid overcounting across buckets
+  const seenHubDates = new Set();
+  let pickedCount = 0;
+
+  rows.forEach(r => {
+    const key = (r.ph || '') + '||' + r.date;
+    if (!seenHubDates.has(key)) {
+      seenHubDates.add(key);
+      pickedCount += (r.picked || 0);
+    }
+  });
 
   const label = kpiPeriod === 1 ? 'D-1' : kpiPeriod === 999 ? 'Overall' : 'Last ' + kpiPeriod + ' Days';
 
@@ -1098,7 +1108,7 @@ function renderSec(sec){
 
     if(!agg[key].byDate[r.date]){
       agg[key].byDate[r.date] = {
-        p:0,
+        p: r.picked || 0, // Picked count set once per unique date per hub
         a:0,
         e:0,
         ar:0,
@@ -1108,33 +1118,36 @@ function renderSec(sec){
     }
 
     const countVal = r.cnt || 0;
-    const pickedVal = r.picked || 0;
-
-    agg[key].p += pickedVal;
-    agg[key].byDate[r.date].p += pickedVal;
 
     if(r.bucket === BA){
-      agg[key].a += countVal;
       agg[key].byDate[r.date].a += countVal;
     }
 
     if(r.bucket === BE){
-      agg[key].e += countVal;
       agg[key].byDate[r.date].e += countVal;
     }
 
     if(r.bucket === BR){
-      agg[key].ar += countVal;
       agg[key].byDate[r.date].ar += countVal;
     }
 
     if(r.bucket === BD){
-      agg[key].d += countVal;
       agg[key].byDate[r.date].d += countVal;
     }
 
-    agg[key].t += countVal;
     agg[key].byDate[r.date].t += countVal;
+  });
+
+  // Consolidate hub-level totals from date breakdown
+  Object.values(agg).forEach(h => {
+    Object.values(h.byDate).forEach(d => {
+      h.p += d.p;
+      h.a += d.a;
+      h.e += d.e;
+      h.ar += d.ar;
+      h.d += d.d;
+      h.t += d.t;
+    });
   });
 
   const ss = sortState[sec];
