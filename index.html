@@ -1,3 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FM Breach Dashboard</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+
+<style>
+:root{
+  --navy:#0F1F3D;
+  --navy2:#1B2A4A;
+  --blue:#2563EB;
+  --red:#DC2626;
+  --amber:#D97706;
+  --green:#059669;
+  --purple:#7C3AED;
+  --teal:#0D9488;
+  --border:#E2E8F0;
+  --text:#1E293B;
+  --muted:#64748B;
+  --bg:#F1F5F9;
+  --white:#fff;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+  font-family:'Segoe UI',Arial,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  font-size:13px;
+}
+
+.hdr{
+  background:var(--navy);
+  padding:13px 22px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:8px;
+  border-bottom:3px solid var(--blue);
+}
+
+.hdr-title{color:#fff;font-size:16px;font-weight:700}
+.hdr-meta{color:#94A3B8;font-size:11px;margin-top:2px}
+
+.filters{
+  background:var(--white);
+  border-bottom:1px solid var(--border);
+  padding:9px 22px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:flex-end;
+}
+
+.fg{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  position:relative;
+}
+
+.fg label{
+  font-size:10px;
+  font-weight:700;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.05em;
+}
+
+.fg select{
+  font-size:12px;
+  padding:5px 8px;
+  border:1px solid var(--border);
+  border-radius:5px;
+  background:var(--white);
+  min-width:118px;
+  outline:none;
+}
+
+.fg select:focus{border-color:var(--blue)}
+
+.btn-reset{
+  background:var(--navy2);
+  color:#fff;
+  align-self:flex-end;
+  padding:5px 13px;
+  border-radius:5px;
+  border:none;
+  font-size:12px;
+  font-weight:600;
+  cursor:pointer;
+}
+
+.date-btn{
+  font-size:12px;
+  padding:5px 10px;
+  border:1px solid var(--border);
+  border-radius:5px;
+  background:var(--white);
+  min-width:150px;
+  cursor:pointer;
+  text-align:left;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:6px;
+}
+
+.date-dropdown{
+  display:none;
+  position:absolute;
+  top:100%;
+  left:0;
+  z-index:100;
+  background:var(--white);
+  border:1px solid var(--border);
+  border-radius:6px;
+  box-shadow:0 4px 16px rgba(0,0,0,.12);
+  min-width:190px;
+  max-height:280px;
+  overflow-y:auto;
+  margin-top:3px;
+}
+
+.date-dropdown.open{display:block}
+
+.date-dropdown-header{
+  padding:8px 12px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  gap:8px;
+}
+
+.date-dropdown-header button{
+  font-size:11px;
+  padding:2px 8px;
+  border-radius:4px;
+  border:1px solid var(--border);
+  background:var(--bg);
+  cursor:pointer;
+}
+
+.date-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:7px 12px;
+  cursor:pointer;
+  font-size:12px;
+}
+
+.date-item:hover{background:#EFF6FF}
+
+.date-item input[type=checkbox]{
+  accent-color:var(--blue);
+  width:14px;
+  height:14px;
+}
+
+.sbar{
+  padding:7px 22px;
+  font-size:12px;
+  color:var(--muted);
+  background:var(--white);
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:32px;
+}
+
+.spin{
+  width:13px;
+  height:13px;
+  border:2px solid var(--border);
+  border-top-color:var(--blue);
+  border-radius:50%;
+  animation:sp .7s linear infinite;
+}
+
+@keyframes sp{
+  to{transform:rotate(360deg)}
+}
+
+.kpi-header{
+  background:var(--white);
+  border-bottom:1px solid var(--border);
+  padding:8px 22px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+.kpi-bar{
+  display:flex;
+  gap:10px;
+  padding:12px 22px;
+  flex-wrap:wrap;
+}
+
+.kpi{
+  background:var(--white);
+  border-radius:8px;
+  padding:11px 16px;
+  flex:1;
+  min-width:110px;
+  border:1px solid var(--border);
+  border-top:3px solid;
+}
+
+.kpi.k0{border-top-color:var(--navy2)}
+.kpi.k1{border-top-color:var(--red)}
+.kpi.k2{border-top-color:var(--purple)}
+.kpi.k3{border-top-color:var(--green)}
+.kpi.k4{border-top-color:var(--amber)}
+.kpi.k5{border-top-color:var(--teal)}
+
+.k-lbl{
+  font-size:10px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  color:var(--muted);
+  margin-bottom:3px;
+}
+
+.k-val{
+  font-size:22px;
+  font-weight:800;
+  color:var(--navy2);
+}
+
+.charts-row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+  padding:0 22px 16px;
+}
+
+.chart-card{
+  background:var(--white);
+  border-radius:10px;
+  border:1px solid var(--border);
+  padding:16px;
+}
+
+.chart-title{
+  font-size:12px;
+  font-weight:700;
+  color:var(--navy2);
+  margin-bottom:12px;
+  text-transform:uppercase;
+}
+
+.chart-wrap{
+  position:relative;
+  height:220px;
+}
+
+.sections{
+  padding:0 22px 22px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.card{
+  background:var(--white);
+  border-radius:10px;
+  border:1px solid var(--border);
+  overflow:hidden;
+}
+
+.card-head{
+  padding:11px 16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid var(--border);
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+.card-title{
+  font-size:13px;
+  font-weight:700;
+  color:var(--navy2);
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.dot{
+  width:9px;
+  height:9px;
+  border-radius:50%;
+}
+
+.d0{background:var(--navy2)}
+.d1{background:var(--blue)}
+.d2{background:var(--amber)}
+
+.ptabs{display:flex}
+
+.pt{
+  padding:4px 11px;
+  font-size:11px;
+  font-weight:600;
+  cursor:pointer;
+  border:1px solid var(--border);
+  color:var(--muted);
+  background:var(--bg);
+}
+
+.pt:first-child{border-radius:5px 0 0 5px}
+.pt:last-child{border-radius:0 5px 5px 0}
+
+.pt.on{
+  background:var(--blue);
+  color:#fff;
+  border-color:var(--blue);
+}
+
+.tw{
+  overflow:auto;
+  max-height:500px;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+thead{
+  position:sticky;
+  top:0;
+  z-index:2;
+}
+
+thead tr{
+  background:var(--navy2);
+  color:#fff;
+}
+
+th{
+  padding:9px 12px;
+  text-align:left;
+  font-size:11px;
+  font-weight:600;
+  white-space:nowrap;
+  cursor:pointer;
+}
+
+th.r{text-align:right}
+
+th .si{
+  margin-left:4px;
+  opacity:.5;
+}
+
+th.sorted-asc .si::after{content:'↑'}
+th.sorted-desc .si::after{content:'↓'}
+th:not(.sorted-asc):not(.sorted-desc) .si::after{content:'⇅'}
+
+tbody tr:nth-child(even){
+  background:#F8FAFC;
+}
+
+tbody tr:hover{
+  background:#EFF6FF;
+}
+
+tr.rt{
+  background:#FEF9C3!important;
+  font-weight:700;
+}
+
+td{
+  padding:8px 12px;
+  font-size:12px;
+  border-bottom:1px solid var(--border);
+  white-space:nowrap;
+}
+
+td.r{
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+  font-weight:600;
+}
+
+.zbadge{
+  display:inline-block;
+  padding:2px 9px;
+  border-radius:10px;
+  font-size:10px;
+  font-weight:700;
+}
+
+.z-North{background:#DBEAFE;color:#1e3a8a}
+.z-South{background:#D1FAE5;color:#065f46}
+.z-East{background:#FEF3C7;color:#92400e}
+.z-West{background:#FCE7F3;color:#9d174d}
+.z-Unknown{background:#F3F4F6;color:#374151}
+
+.no-data{
+  text-align:center;
+  padding:36px;
+  color:var(--muted);
+  font-size:14px;
+}
+
+.expand-btn{
+  cursor:pointer;
+  color:var(--blue);
+  font-weight:bold;
+  margin-right:6px;
+  display:inline-block;
+  width:14px;
+  text-align:center;
+}
+
+.sub-table-container{
+  background:#f8fafc;
+  padding:10px 14px;
+  border-left:3px solid var(--blue);
+  border-radius:0 6px 6px 0;
+  margin:4px 0;
+}
+
+.sub-table{
+  width:100%;
+  max-width:700px;
+  background:#fff;
+  border:1px solid var(--border);
+  margin-top:6px;
+}
+
+.sub-table th{
+  background:#e2e8f0;
+  color:var(--navy2);
+  padding:6px 10px;
+}
+
+.sub-table td{
+  padding:5px 10px;
+}
+
+@media(max-width:800px){
+  .charts-row{grid-template-columns:1fr}
+}
+</style>
+</head>
+
+<body>
+
+<div class="hdr">
+  <div>
+    <div class="hdr-title">🚚 FM Breach Dashboard</div>
+    <div class="hdr-meta" id="hdr-meta">Loading...</div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span style="color:#94A3B8;font-size:11px" id="last-upd">
+      Last updated: 15-08-2026
+    </span>
+
+    <button onclick="downloadRaw()"
+      style="padding:5px 13px;background:#059669;color:#fff;border:none;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;">
+      ⬇ Raw CSV
+    </button>
+  </div>
+</div>
+
+<div class="filters">
+
+  <div class="fg" id="date-fg">
+    <label>Date</label>
+
+    <button class="date-btn" onclick="toggleDateDD(event)">
+      <span id="date-btn-label">All Dates</span>
+      <span>▼</span>
+    </button>
+
+    <div class="date-dropdown" id="date-dd">
+      <div class="date-dropdown-header">
+        <button onclick="selectAllDates()">All</button>
+        <button onclick="clearAllDates()">None</button>
+      </div>
+      <div id="date-list"></div>
+    </div>
+  </div>
+
+  <div class="fg">
+    <label>Zone</label>
+    <select id="f-zone" onchange="applyFilters()">
+      <option value="">All Zones</option>
+    </select>
+  </div>
+
+  <div class="fg">
+    <label>GM</label>
+    <select id="f-gm" onchange="applyFilters()">
+      <option value="">All GMs</option>
+    </select>
+  </div>
+
+  <div class="fg">
+    <label>RM</label>
+    <select id="f-rm" onchange="applyFilters()">
+      <option value="">All RMs</option>
+    </select>
+  </div>
+
+  <div class="fg">
+    <label>AM</label>
+    <select id="f-am" onchange="applyFilters()">
+      <option value="">All AMs</option>
+    </select>
+  </div>
+
+  <div class="fg">
+    <label>Hub (PH)</label>
+    <select id="f-ph" onchange="applyFilters()">
+      <option value="">All Hubs</option>
+    </select>
+  </div>
+
+  <div class="fg">
+    <label>Functional / CPD</label>
+    <select id="f-type" onchange="applyFilters()">
+      <option value="all">Functional (All)</option>
+      <option value="cpd">CPD Breach only</option>
+    </select>
+  </div>
+
+  <button class="btn-reset" onclick="resetFilters()">Reset</button>
+
+</div>
+
+<div class="sbar" id="sbar">
+  <span class="spin"></span> Initialising...
+</div>
+
+<div class="kpi-header">
+
+  <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;">
+    Summary
+  </span>
+
+  <div class="ptabs" id="tp-kpi">
+    <div class="pt on" onclick="setKpiP(1,this)">D-1</div>
+    <div class="pt" onclick="setKpiP(3,this)">Last 3 Days</div>
+    <div class="pt" onclick="setKpiP(5,this)">Last 5 Days</div>
+    <div class="pt" onclick="setKpiP(7,this)">Last 7 Days</div>
+    <div class="pt" onclick="setKpiP(999,this)">Overall</div>
+  </div>
+
+</div>
+
+<div class="kpi-bar" id="kpi-bar"></div>
+
+<div class="charts-row">
+
+  <div class="chart-card">
+    <div class="chart-title">📊 Breach Trend by Date</div>
+    <div class="chart-wrap">
+      <canvas id="chart-trend"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">◉ Breach Mix (Current Period)</div>
+    <div class="chart-wrap">
+      <canvas id="chart-mix"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<div class="sections">
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">
+        <span class="dot d0"></span>
+        Overall Breach — Attempt + EKL + Auto Reset + Dispatch
+      </div>
+
+      <div class="ptabs" id="tp0">
+        <div class="pt on" onclick="setP(0,1,this)">D-1</div>
+        <div class="pt" onclick="setP(0,3,this)">Last 3 Days</div>
+        <div class="pt" onclick="setP(0,5,this)">Last 5 Days</div>
+        <div class="pt" onclick="setP(0,7,this)">Last 7 Days</div>
+        <div class="pt" onclick="setP(0,999,this)">Overall</div>
+      </div>
+    </div>
+
+    <div class="tw">
+      <table id="t0"></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">
+        <span class="dot d1"></span>
+        Pickup Breach — Attempt + EKL + Auto Reset
+      </div>
+
+      <div class="ptabs" id="tp1">
+        <div class="pt on" onclick="setP(1,1,this)">D-1</div>
+        <div class="pt" onclick="setP(1,3,this)">Last 3 Days</div>
+        <div class="pt" onclick="setP(1,5,this)">Last 5 Days</div>
+        <div class="pt" onclick="setP(1,7,this)">Last 7 Days</div>
+        <div class="pt" onclick="setP(1,999,this)">Overall</div>
+      </div>
+    </div>
+
+    <div class="tw">
+      <table id="t1"></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">
+        <span class="dot d2"></span>
+        Dispatch Breach
+      </div>
+
+      <div class="ptabs" id="tp2">
+        <div class="pt on" onclick="setP(2,1,this)">D-1</div>
+        <div class="pt" onclick="setP(2,3,this)">Last 3 Days</div>
+        <div class="pt" onclick="setP(2,5,this)">Last 5 Days</div>
+        <div class="pt" onclick="setP(2,7,this)">Last 7 Days</div>
+        <div class="pt" onclick="setP(2,999,this)">Overall</div>
+      </div>
+    </div>
+
+    <div class="tw">
+      <table id="t2"></table>
+    </div>
+  </div>
+
+</div>
+
 <script>
 
 const BA = 'Attempt Breach';
@@ -20,7 +674,6 @@ let selectedDates = new Set();
 let chartTrend = null;
 let chartMix = null;
 
-/* Start sorting by Hub */
 let sortState = [
   {col:0,asc:true},
   {col:0,asc:true},
@@ -674,3 +1327,5 @@ function downloadRaw(){
 window.addEventListener('DOMContentLoaded', loadData);
 
 </script>
+</body>
+</html>
