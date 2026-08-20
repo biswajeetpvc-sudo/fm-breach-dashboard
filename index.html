@@ -437,7 +437,7 @@ td.r{
 
 .sub-table{
   width:100%;
-  max-width:700px;
+  max-width:780px;
   background:#fff;
   border:1px solid var(--border);
   margin-top:6px;
@@ -469,7 +469,7 @@ td.r{
 
   <div style="display:flex;align-items:center;gap:8px;">
     <span style="color:#94A3B8;font-size:11px" id="last-upd">
-      Last updated: 15-08-2026
+      Last updated: 21-08-2026
     </span>
 
     <button onclick="downloadRaw()"
@@ -682,6 +682,11 @@ let sortState = [
 
 function N(num) {
   return (num || 0).toLocaleString();
+}
+
+function pct(t, p) {
+  if (!p || p === 0) return '0.00%';
+  return ((t / p) * 100).toFixed(2) + '%';
 }
 
 function setS(type, msg) {
@@ -1037,13 +1042,14 @@ function sortRows(rows,col,asc,buckets){
     if(sR) numericKeys.push('ar');
     if(sD) numericKeys.push('d');
     numericKeys.push('t');
+    numericKeys.push('bp');
 
     key = numericKeys[col - 6] || 't';
   }
 
   return [...rows].sort((a,b) => {
-    const av = a[key];
-    const bv = b[key];
+    let av = key === 'bp' ? (a.p ? (a.t / a.p) : 0) : a[key];
+    let bv = key === 'bp' ? (b.p ? (b.t / b.p) : 0) : b[key];
 
     if(typeof av === 'string'){
       return asc ? av.localeCompare(bv) : bv.localeCompare(av);
@@ -1171,7 +1177,8 @@ function renderSec(sec){
   if(sR) header += thC(prefix + 'Auto Reset', numCI++, 'r');
   if(sD) header += thC(prefix + 'Dispatch Breach', numCI++, 'r');
 
-  header += thC(showAverage ? 'Avg Daily Total' : 'Grand Total', numCI, 'r');
+  header += thC(showAverage ? 'Avg Daily Total' : 'Grand Total', numCI++, 'r');
+  header += thC(prefix + 'Breach %', numCI++, 'r');
   header += '</tr></thead>';
 
   const zbadge = z => '<span class="zbadge z-' + (z || 'Unknown') + '">' + (z || '?') + '</span>';
@@ -1195,10 +1202,11 @@ function renderSec(sec){
     if(sD) html += '<td class="r">' + formatValue(d.d) + '</td>';
 
     html += '<td class="r" style="color:var(--blue);font-weight:700">' + formatValue(d.t) + '</td>';
+    html += '<td class="r" style="color:var(--red);font-weight:700">' + pct(d.t, d.p) + '</td>';
     return html;
   };
 
-  const totalCols = 6 + [sA,sE,sR,sD].filter(Boolean).length + 1;
+  const totalCols = 6 + [sA,sE,sR,sD].filter(Boolean).length + 2;
 
   let body = '<tbody>';
 
@@ -1221,7 +1229,8 @@ function renderSec(sec){
       if(sR) dateRows += '<td class="r">' + N(data.ar) + '</td>';
       if(sD) dateRows += '<td class="r">' + N(data.d) + '</td>';
 
-      dateRows += '<td class="r" style="color:var(--blue);font-weight:700">' + N(data.t) + '</td></tr>';
+      dateRows += '<td class="r" style="color:var(--blue);font-weight:700">' + N(data.t) + '</td>';
+      dateRows += '<td class="r" style="color:var(--red);font-weight:700">' + pct(data.t, data.p) + '</td></tr>';
     });
 
     body +=
@@ -1250,6 +1259,7 @@ function renderSec(sec){
       (sR ? '<th class="r">Auto Reset</th>' : '') +
       (sD ? '<th class="r">Dispatch</th>' : '') +
       '<th class="r">Total</th>' +
+      '<th class="r">Breach %</th>' +
       '</tr></thead>' +
       '<tbody>' + dateRows + '</tbody>' +
       '</table>' +
