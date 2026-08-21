@@ -556,13 +556,11 @@ td.r{
   </span>
 
   <div style="display:flex;gap:12px;align-items:center;">
-    <!-- Average vs Absolute Toggle (Summary Only) -->
     <div class="ptabs" id="tp-kpi-mode">
       <div class="pt on" onclick="setKpiMode('avg',this)">Average</div>
       <div class="pt" onclick="setKpiMode('abs',this)">Absolute</div>
     </div>
 
-    <!-- KPI Period Selector -->
     <div class="ptabs" id="tp-kpi">
       <div class="pt on" onclick="setKpiP(1,this)">D-1</div>
       <div class="pt" onclick="setKpiP(3,this)">Last 3 Days</div>
@@ -672,12 +670,13 @@ const ALL = [BA,BE,BR,BD];
 const PICKUP = [BA,BE,BR];
 
 let RAW = [];
+let PICKED_MAP = {}; 
 let DATES = [];
 let filtered = [];
 
 let periods = [1,1,1];
 let kpiPeriod = 1;
-let kpiMode = 'avg'; // Summary KPI mode: 'avg' or 'abs'
+let kpiMode = 'avg';
 
 let selectedDates = new Set();
 
@@ -708,15 +707,26 @@ function setS(type, msg) {
   }
 }
 
+// Converts YYYYMMDD string format (e.g., 20260809) into DD-MM-YYYY format (09-08-2026)
+function formatCompactDate(compactStr) {
+  const str = String(compactStr).trim();
+  if (str.length === 8) {
+    const yyyy = str.substring(0, 4);
+    const mm = str.substring(4, 6);
+    const dd = str.substring(6, 8);
+    return `${dd}-${mm}-${yyyy}`;
+  }
+  return str;
+}
+
 async function loadData(){
   try{
-    // Bypasses browser cache by appending a timestamp and enforcing no-store
     const response = await fetch('data.json?v=' + Date.now(), { cache: "no-store" });
     if(!response.ok){
       throw new Error('HTTP ' + response.status);
     }
-    const rows = await response.json();
-    init(rows);
+    const payload = await response.json();
+    init(payload);
   }catch(e){
     setS('err', 'Failed to load data.json: ' + e.message);
   }
@@ -724,7 +734,6 @@ async function loadData(){
 
 function dv(s){
   if(!s) return 0;
-  // Parses date formatted as DD-MM-YYYY or YYYY-MM-DD
   const p = s.split(/[-/]/);
   if(p[0].length === 4){
     return new Date(p[0] + '-' + p[1] + '-' + p[2]).getTime();
@@ -732,11 +741,54 @@ function dv(s){
   return new Date(p[2] + '-' + p[1] + '-' + p[0]).getTime();
 }
 
-function init(rows){
-  RAW = rows.map(r => ({
-    ...r,
-    picked: r.total_picked || r.picked || r.picked_count || 0
-  }));
+function init(payload){
+  let rows = [];
+  let pickedDataArray = [];
+
+  // Handle payload structures: Array or Object with picked_data
+  if (Array.isArray(payload)) {
+    rows = payload;
+  } else if (typeof payload === 'object' && payload !== null) {
+    rows = payload.breach_data || payload.data || [];
+    pickedDataArray = payload.picked_data || payload.Picked_Data || payload.pickedData || [];
+  }
+
+  // Process matrix structure from Picked Data sheet
+  PICKED_MAP = {};
+  if (Array.isArray(pickedDataArray) && pickedDataArray.length > 0) {
+    pickedDataArray.forEach(row => {
+      const hubName = row.Hub || row.hub || row.HUB || row['Hub Name'];
+      if (!hubName) return;
+
+      Object.keys(row).forEach(key => {
+        if (key.toLowerCase() !== 'hub' && key.toLowerCase() !== 'hub name') {
+          const formattedDate = formatCompactDate(key);
+          const mapKey = (hubName + '||' + formattedDate).trim().toLowerCase();
+          const val = Number(row[key]) || 0;
+          PICKED_MAP[mapKey] = val;
+        }
+      });
+    });
+  }
+
+  RAW = rows.map(r => {
+    const hub = r.ph || r.hub || '';
+    const date = r.date || '';
+    const mapKey = (hub + '||' + date).trim().toLowerCase();
+
+    // Priority: Matrix Lookup -> Direct picked key -> default 0
+    let pickedVal = 0;
+    if (PICKED_MAP[mapKey] !== undefined) {
+      pickedVal = PICKED_MAP[mapKey];
+    } else {
+      pickedVal = r.total_picked || r.picked || r.picked_count || 0;
+    }
+
+    return {
+      ...r,
+      picked: Number(pickedVal)
+    };
+  });
 
   DATES = [...new Set(RAW.map(r => r.date))].sort((a,b) => dv(b) - dv(a));
   selectedDates = new Set();
