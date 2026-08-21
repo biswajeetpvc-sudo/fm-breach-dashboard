@@ -745,7 +745,6 @@ function init(payload){
   let rows = [];
   let pickedDataArray = [];
 
-  // Handle payload structures: Array or Object with picked_data
   if (Array.isArray(payload)) {
     rows = payload;
   } else if (typeof payload === 'object' && payload !== null) {
@@ -753,7 +752,6 @@ function init(payload){
     pickedDataArray = payload.picked_data || payload.Picked_Data || payload.pickedData || [];
   }
 
-  // Process matrix structure from Picked Data sheet
   PICKED_MAP = {};
   if (Array.isArray(pickedDataArray) && pickedDataArray.length > 0) {
     pickedDataArray.forEach(row => {
@@ -771,22 +769,26 @@ function init(payload){
     });
   }
 
+  // 1. RAW Mapping: Retain picked count on every row regardless of r.cnt existence
   RAW = rows.map(r => {
-    const hub = r.ph || r.hub || '';
-    const date = r.date || '';
+    const hub = r.ph || r.hub || r.HUB || r['Hub Name'] || '';
+    const date = r.date || r.Date || '';
     const mapKey = (hub + '||' + date).trim().toLowerCase();
 
-    // Priority: Matrix Lookup -> Direct picked key -> default 0
     let pickedVal = 0;
     if (PICKED_MAP[mapKey] !== undefined) {
       pickedVal = PICKED_MAP[mapKey];
     } else {
-      pickedVal = r.total_picked || r.picked || r.picked_count || 0;
+      pickedVal = r.total_picked !== undefined ? r.total_picked :
+                 (r.picked !== undefined ? r.picked :
+                 (r.picked_count !== undefined ? r.picked_count : 0));
     }
 
     return {
       ...r,
-      picked: Number(pickedVal)
+      ph: hub,
+      date: date,
+      picked: Number(pickedVal) || 0
     };
   });
 
@@ -1167,11 +1169,26 @@ function sortRows(rows,col,asc,buckets,periodDays){
   });
 }
 
+// 2. Updated Aggregation Logic (renderSec Function)
 function renderSec(sec){
   const buckets = sec === 0 ? ALL : sec === 1 ? PICKUP : [BD];
   const ds = datesForN(periods[sec]);
   const periodDays = ds.size || 1;
   const showAverage = periodDays > 1;
+
+  // Pre-calculate total pickup count per Hub ('ph') across active dates regardless of breaches
+  const pickupByHub = {};
+  const seenPhDates = new Set();
+
+  filtered.forEach(f => {
+    if (ds.has(f.date) && f.ph) {
+      const dKey = f.ph + '||' + f.date;
+      if (!seenPhDates.has(dKey)) {
+        seenPhDates.add(dKey);
+        pickupByHub[f.ph] = (pickupByHub[f.ph] || 0) + (f.picked || 0);
+      }
+    }
+  });
 
   const rows = filtered.filter(r => ds.has(r.date) && buckets.includes(r.bucket));
   const agg = {};
@@ -1186,7 +1203,7 @@ function renderSec(sec){
         gm:r.gm,
         rm:r.rm,
         am:r.am,
-        p:0,
+        p: pickupByHub[r.ph] || 0, // Direct main line total pickup assignment
         a:0,
         e:0,
         ar:0,
@@ -1228,9 +1245,9 @@ function renderSec(sec){
     agg[key].byDate[r.date].t += countVal;
   });
 
+  // Roll up breach counts exclusively (Do NOT overwrite/accumulate main line hub.p)
   Object.values(agg).forEach(h => {
     Object.values(h.byDate).forEach(d => {
-      h.p += d.p;
       h.a += d.a;
       h.e += d.e;
       h.ar += d.ar;
@@ -1358,86 +1375,78 @@ function renderSec(sec){
 
     body +=
       '<tr>' +
-      '<td style="max-width:230px;overflow:hidden;text-overflow:ellipsis">' +
-      '<span id="' + btnId + '" class="expand-btn" onclick="toggleHubSubRow(\'' + subId + '\',\'' + btnId + '\')">▶</span>' +
-      '<strong style="cursor:pointer" onclick="toggleHubSubRow(\'' + subId + '\',\'' + btnId + '\')">' + r.ph + '</strong>' +
-      '</td>' +
+      '<td><span class="expand-btn" id="' + btnId + '" onclick="toggleSubTable(\'' + subId + '\',\'' + btnId + '\')">+</span>' + (r.ph || 'N/A') + '</td>' +
       '<td>' + zbadge(r.zone) + '</td>' +
-      '<td>' + r.gm + '</td>' +
-      '<td>' + r.rm + '</td>' +
-      '<td>' + r.am + '</td>' +
+      '<td>' + (r.gm || '') + '</td>' +
+      '<td>' + (r.rm || '') + '</td>' +
+      '<td>' + (r.am || '') + '</td>' +
       cells(r) +
-      '</tr>' +
+      '</tr>';
 
-      '<tr id="' + subId + '" style="display:none;background:#f8fafc">' +
-      '<td colspan="' + totalCols + '" style="padding:4px 16px 12px 28px">' +
+    body +=
+      '<tr id="' + subId + '" style="display:none;"><td colspan="' + totalCols + '">' +
       '<div class="sub-table-container">' +
-      '<div style="font-weight:700;font-size:11px;color:var(--navy2)">📅 Date-wise Breakdown for ' + r.ph + '</div>' +
+      '<div style="font-weight:700;font-size:11px;color:var(--navy2);">Date-wise Breach Breakdown</div>' +
       '<table class="sub-table">' +
       '<thead><tr>' +
       '<th>Date</th>' +
-      '<th class="r">Picked Count</th>' +
-      (sA ? '<th class="r">Attempt</th>' : '') +
-      (sE ? '<th class="r">EKL</th>' : '') +
-      (sR ? '<th class="r">Auto Reset</th>' : '') +
-      (sD ? '<th class="r">Dispatch</th>' : '') +
+      '<th class="r">Picked</th>';
+
+    if(sA) body += '<th class="r">Attempt</th>';
+    if(sE) body += '<th class="r">EKL</th>';
+    if(sR) body += '<th class="r">Auto Reset</th>';
+    if(sD) body += '<th class="r">Dispatch</th>';
+
+    body +=
       '<th class="r">Total</th>' +
       '<th class="r">Breach %</th>' +
       '</tr></thead>' +
       '<tbody>' + dateRows + '</tbody>' +
-      '</table>' +
-      '</div>' +
-      '</td>' +
-      '</tr>';
+      '</table></div></td></tr>';
   });
 
   body +=
     '<tr class="rt">' +
-    '<td colspan="5">' + (showAverage ? 'Average Daily Total' : 'Grand Total') + '</td>' +
+    '<td colspan="5">Grand Total</td>' +
     cells(gt) +
-    '</tr>' +
-    '</tbody>';
+    '</tr>';
 
+  body += '</tbody>';
   tbl.innerHTML = header + body;
 }
 
-function toggleHubSubRow(subId,btnId){
+function toggleSubTable(subId, btnId) {
   const row = document.getElementById(subId);
-  const button = document.getElementById(btnId);
-
-  if(!row) return;
-
-  if(row.style.display === 'none'){
+  const btn = document.getElementById(btnId);
+  if (!row || !btn) return;
+  if (row.style.display === 'none') {
     row.style.display = 'table-row';
-    button.innerHTML = '▼';
-  }else{
+    btn.textContent = '-';
+  } else {
     row.style.display = 'none';
-    button.innerHTML = '▶';
+    btn.textContent = '+';
   }
 }
 
-function doSort(sec,col){
-  const ss = sortState[sec];
-  if(ss.col === col){
-    ss.asc = !ss.asc;
-  }else{
-    ss.col = col;
-    ss.asc = col < 5;
+function doSort(sec, col) {
+  if (sortState[sec].col === col) {
+    sortState[sec].asc = !sortState[sec].asc;
+  } else {
+    sortState[sec].col = col;
+    sortState[sec].asc = true;
   }
   renderSec(sec);
 }
 
-function downloadRaw(){
-  if(!filtered || !filtered.length){
-    alert("No filtered data available to download.");
+function downloadRaw() {
+  if (!filtered || !filtered.length) {
+    alert('No data to export.');
     return;
   }
-
-  const worksheet = XLSX.utils.json_to_sheet(filtered);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Raw Data");
-
-  XLSX.writeFile(workbook, "FM_Breach_Raw_Data.xlsx");
+  const ws = XLSX.utils.json_to_sheet(filtered);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Raw Data");
+  XLSX.writeFile(wb, "FM_Breach_Raw_Data.xlsx");
 }
 
 window.onload = loadData;
