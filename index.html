@@ -39,7 +39,7 @@ body{
   padding:13px 22px;
   display:flex;
   align-items:center;
-  justify-content:space-between;
+  justify-style:space-between;
   flex-wrap:wrap;
   gap:8px;
   border-bottom:3px solid var(--blue);
@@ -707,7 +707,6 @@ function setS(type, msg) {
   }
 }
 
-// Canonical date normalizer to prevent string mismatches (e.g. YYYY-MM-DD, YYYYMMDD, or trailing spaces)
 function normalizeDateStr(d) {
   if (!d) return '';
   let s = String(d).trim().replace(/\//g, '-');
@@ -984,6 +983,34 @@ function setKpiP(days,el){
   renderCharts();
 }
 
+// Compute Deduplicated Hub Pickup Map by Hub + Date
+function computeHubPickups(datesSet) {
+  const hubDateMap = {};
+  filtered.forEach(r => {
+    const d = normalizeDateStr(r.date);
+    if (!datesSet.has(d)) return;
+    const hub = String(r.ph || '').trim().toLowerCase();
+    if (!hub) return;
+
+    const key = hub + '||' + d;
+    if (!(key in hubDateMap)) {
+      hubDateMap[key] = Number(r.picked || 0);
+    }
+  });
+
+  const hubTotals = {};
+  let overallTotal = 0;
+
+  Object.keys(hubDateMap).forEach(key => {
+    const [hub] = key.split('||');
+    const val = hubDateMap[key];
+    hubTotals[hub] = (hubTotals[hub] || 0) + val;
+    overallTotal += val;
+  });
+
+  return { hubTotals, hubDateMap, overallTotal };
+}
+
 function renderKPIs(){
   const ds = datesForN(kpiPeriod);
   const periodDays = ds.size || 1;
@@ -997,22 +1024,8 @@ function renderKPIs(){
     return isAvg ? (sum / periodDays) : sum;
   };
 
-  const seenHubDates = new Set();
-  let pickedSum = 0;
-
-  rows.forEach(r => {
-    const hub = String(r.ph || '').trim().toLowerCase();
-    const dt = normalizeDateStr(r.date);
-    if (hub && dt) {
-      const key = hub + '||' + dt;
-      if (!seenHubDates.has(key)) {
-        seenHubDates.add(key);
-        pickedSum += Number(r.picked || 0);
-      }
-    }
-  });
-
-  const finalPicked = isAvg ? (pickedSum / periodDays) : pickedSum;
+  const { overallTotal } = computeHubPickups(ds);
+  const finalPicked = isAvg ? (overallTotal / periodDays) : overallTotal;
 
   const periodLabel = kpiPeriod === 1 ? 'D-1' : kpiPeriod === 999 ? 'Overall' : 'Last ' + kpiPeriod + ' Days';
   const modeLabel = isAvg ? 'Avg Daily ' : '';
@@ -1180,59 +1193,38 @@ function renderSec(sec){
   const periodDays = ds.size || 1;
   const showAverage = periodDays > 1;
 
-  const pickupByHub = {};
-  const seenPhDates = new Set();
-
-  filtered.forEach(f => {
-    const fDate = normalizeDateStr(f.date);
-    if (ds.has(fDate) && f.ph) {
-      const hubNorm = String(f.ph).trim().toLowerCase();
-      const dKey = hubNorm + '||' + fDate;
-
-      if (!seenPhDates.has(dKey)) {
-        seenPhDates.add(dKey);
-        pickupByHub[hubNorm] = (pickupByHub[hubNorm] || 0) + Number(f.picked || 0);
-      }
-    }
-  });
+  const { hubTotals, hubDateMap } = computeHubPickups(ds);
 
   const rows = filtered.filter(r => ds.has(normalizeDateStr(r.date)) && buckets.includes(r.bucket));
   const agg = {};
 
   rows.forEach(r => {
     const rDate = normalizeDateStr(r.date);
-    const key = String(r.ph).trim() + '||' + r.zone + '||' + r.gm + '||' + r.rm + '||' + r.am;
-    const hubNorm = String(r.ph).trim().toLowerCase();
+    const hubNorm = String(r.ph || '').trim().toLowerCase();
+    const key = hubNorm + '||' + (r.zone || '') + '||' + (r.gm || '') + '||' + (r.rm || '') + '||' + (r.am || '');
 
     if(!agg[key]){
       agg[key] = {
-        ph:r.ph,
-        zone:r.zone,
-        gm:r.gm,
-        rm:r.rm,
-        am:r.am,
-        p: pickupByHub[hubNorm] || 0,
-        a:0,
-        e:0,
-        ar:0,
-        d:0,
-        t:0,
-        byDate:{}
+        ph: r.ph,
+        zone: r.zone,
+        gm: r.gm,
+        rm: r.rm,
+        am: r.am,
+        p: hubTotals[hubNorm] || 0,
+        a: 0, e: 0, ar: 0, d: 0, t: 0,
+        byDate: {}
       };
     }
 
     if(!agg[key].byDate[rDate]){
+      const hKey = hubNorm + '||' + rDate;
       agg[key].byDate[rDate] = {
-        p: r.picked || 0,
-        a:0,
-        e:0,
-        ar:0,
-        d:0,
-        t:0
+        p: hubDateMap[hKey] || 0,
+        a: 0, e: 0, ar: 0, d: 0, t: 0
       };
     }
 
-    const countVal = r.cnt || 0;
+    const countVal = r.cnt || 1;
 
     if(r.bucket === BA) agg[key].byDate[rDate].a += countVal;
     if(r.bucket === BE) agg[key].byDate[rDate].e += countVal;
