@@ -707,10 +707,10 @@ function setS(type, msg) {
   }
 }
 
-// Converts YYYYMMDD string format (e.g., 20260809) into DD-MM-YYYY format (09-08-2026)
+// Format date compact string YYYYMMDD to DD-MM-YYYY
 function formatCompactDate(compactStr) {
   const str = String(compactStr).trim();
-  if (str.length === 8) {
+  if (str.length === 8 && /^\d+$/.test(str)) {
     const yyyy = str.substring(0, 4);
     const mm = str.substring(4, 6);
     const dd = str.substring(6, 8);
@@ -734,8 +734,8 @@ async function loadData(){
 
 function dv(s){
   if(!s) return 0;
-  const p = s.split(/[-/]/);
-  if(p[0].length === 4){
+  const p = String(s).trim().split(/[-/]/);
+  if(p[0] && p[0].length === 4){
     return new Date(p[0] + '-' + p[1] + '-' + p[2]).getTime();
   }
   return new Date(p[2] + '-' + p[1] + '-' + p[0]).getTime();
@@ -752,6 +752,7 @@ function init(payload){
     pickedDataArray = payload.picked_data || payload.Picked_Data || payload.pickedData || [];
   }
 
+  // Parse Matrix Picked Map
   PICKED_MAP = {};
   if (Array.isArray(pickedDataArray) && pickedDataArray.length > 0) {
     pickedDataArray.forEach(row => {
@@ -761,7 +762,7 @@ function init(payload){
       Object.keys(row).forEach(key => {
         if (key.toLowerCase() !== 'hub' && key.toLowerCase() !== 'hub name') {
           const formattedDate = formatCompactDate(key);
-          const mapKey = (hubName + '||' + formattedDate).trim().toLowerCase();
+          const mapKey = (String(hubName).trim() + '||' + String(formattedDate).trim()).toLowerCase();
           const val = Number(row[key]) || 0;
           PICKED_MAP[mapKey] = val;
         }
@@ -769,11 +770,11 @@ function init(payload){
     });
   }
 
-  // 1. RAW Mapping: Retain picked count on every row regardless of r.cnt existence
+  // Raw Mapping: Ensure every row retains its picked count regardless of r.cnt existence
   RAW = rows.map(r => {
-    const hub = r.ph || r.hub || r.HUB || r['Hub Name'] || '';
-    const date = r.date || r.Date || '';
-    const mapKey = (hub + '||' + date).trim().toLowerCase();
+    const hub = String(r.ph || r.hub || r.HUB || r['Hub Name'] || '').trim();
+    const date = String(r.date || r.Date || '').trim();
+    const mapKey = (hub + '||' + date).toLowerCase();
 
     let pickedVal = 0;
     if (PICKED_MAP[mapKey] !== undefined) {
@@ -996,14 +997,19 @@ function renderKPIs(){
     return isAvg ? (sum / periodDays) : sum;
   };
 
+  // Robust Deduplication Key Normalization (trims spaces and lowers casing)
   const seenHubDates = new Set();
   let pickedSum = 0;
 
   rows.forEach(r => {
-    const key = (r.ph || '') + '||' + r.date;
-    if (!seenHubDates.has(key)) {
-      seenHubDates.add(key);
-      pickedSum += (r.picked || 0);
+    const hub = String(r.ph || '').trim().toLowerCase();
+    const dt = String(r.date || '').trim();
+    if (hub && dt) {
+      const key = hub + '||' + dt;
+      if (!seenHubDates.has(key)) {
+        seenHubDates.add(key);
+        pickedSum += Number(r.picked || 0);
+      }
     }
   });
 
@@ -1169,23 +1175,25 @@ function sortRows(rows,col,asc,buckets,periodDays){
   });
 }
 
-// 2. Updated Aggregation Logic (renderSec Function)
 function renderSec(sec){
   const buckets = sec === 0 ? ALL : sec === 1 ? PICKUP : [BD];
   const ds = datesForN(periods[sec]);
   const periodDays = ds.size || 1;
   const showAverage = periodDays > 1;
 
-  // Pre-calculate total pickup count per Hub ('ph') across active dates regardless of breaches
+  // Pre-calculate normalized total pickup count per Hub ('ph') across active dates
   const pickupByHub = {};
   const seenPhDates = new Set();
 
   filtered.forEach(f => {
     if (ds.has(f.date) && f.ph) {
-      const dKey = f.ph + '||' + f.date;
+      const hubNorm = String(f.ph).trim().toLowerCase();
+      const dtNorm = String(f.date).trim();
+      const dKey = hubNorm + '||' + dtNorm;
+
       if (!seenPhDates.has(dKey)) {
         seenPhDates.add(dKey);
-        pickupByHub[f.ph] = (pickupByHub[f.ph] || 0) + (f.picked || 0);
+        pickupByHub[hubNorm] = (pickupByHub[hubNorm] || 0) + Number(f.picked || 0);
       }
     }
   });
@@ -1194,7 +1202,8 @@ function renderSec(sec){
   const agg = {};
 
   rows.forEach(r => {
-    const key = r.ph + '||' + r.zone + '||' + r.gm + '||' + r.rm + '||' + r.am;
+    const key = String(r.ph).trim() + '||' + r.zone + '||' + r.gm + '||' + r.rm + '||' + r.am;
+    const hubNorm = String(r.ph).trim().toLowerCase();
 
     if(!agg[key]){
       agg[key] = {
@@ -1203,7 +1212,7 @@ function renderSec(sec){
         gm:r.gm,
         rm:r.rm,
         am:r.am,
-        p: pickupByHub[r.ph] || 0, // Direct main line total pickup assignment
+        p: pickupByHub[hubNorm] || 0,
         a:0,
         e:0,
         ar:0,
@@ -1226,26 +1235,15 @@ function renderSec(sec){
 
     const countVal = r.cnt || 0;
 
-    if(r.bucket === BA){
-      agg[key].byDate[r.date].a += countVal;
-    }
-
-    if(r.bucket === BE){
-      agg[key].byDate[r.date].e += countVal;
-    }
-
-    if(r.bucket === BR){
-      agg[key].byDate[r.date].ar += countVal;
-    }
-
-    if(r.bucket === BD){
-      agg[key].byDate[r.date].d += countVal;
-    }
+    if(r.bucket === BA) agg[key].byDate[r.date].a += countVal;
+    if(r.bucket === BE) agg[key].byDate[r.date].e += countVal;
+    if(r.bucket === BR) agg[key].byDate[r.date].ar += countVal;
+    if(r.bucket === BD) agg[key].byDate[r.date].d += countVal;
 
     agg[key].byDate[r.date].t += countVal;
   });
 
-  // Roll up breach counts exclusively (Do NOT overwrite/accumulate main line hub.p)
+  // Aggregate breach counts (Main line pickup 'h.p' stays untouched)
   Object.values(agg).forEach(h => {
     Object.values(h.byDate).forEach(d => {
       h.a += d.a;
