@@ -469,7 +469,7 @@ td.r{
 
   <div style="display:flex;align-items:center;gap:8px;">
     <span style="color:#94A3B8;font-size:11px" id="last-upd">
-      Last updated: 21-08-2026
+      Last updated: Live
     </span>
 
     <button onclick="downloadRaw()"
@@ -710,7 +710,8 @@ function setS(type, msg) {
 
 async function loadData(){
   try{
-    const response = await fetch('data.json');
+    // Bypasses browser cache by appending a timestamp and enforcing no-store
+    const response = await fetch('data.json?v=' + Date.now(), { cache: "no-store" });
     if(!response.ok){
       throw new Error('HTTP ' + response.status);
     }
@@ -723,7 +724,11 @@ async function loadData(){
 
 function dv(s){
   if(!s) return 0;
-  const p = s.split('-');
+  // Parses date formatted as DD-MM-YYYY or YYYY-MM-DD
+  const p = s.split(/[-/]/);
+  if(p[0].length === 4){
+    return new Date(p[0] + '-' + p[1] + '-' + p[2]).getTime();
+  }
   return new Date(p[2] + '-' + p[1] + '-' + p[0]).getTime();
 }
 
@@ -740,7 +745,11 @@ function init(rows){
     DATES.length + ' dates · ' +
     RAW.length.toLocaleString() +
     ' records · Latest: ' +
-    DATES[0];
+    (DATES[0] || 'N/A');
+
+  if (DATES.length > 0) {
+    document.getElementById('last-upd').textContent = 'Last updated: ' + DATES[0];
+  }
 
   buildFilters();
   applyFilters();
@@ -933,7 +942,6 @@ function renderKPIs(){
     return isAvg ? (sum / periodDays) : sum;
   };
 
-  // Deduplicate picked count per Hub + Date to avoid overcounting across buckets
   const seenHubDates = new Set();
   let pickedSum = 0;
 
@@ -1138,7 +1146,7 @@ function renderSec(sec){
 
     if(!agg[key].byDate[r.date]){
       agg[key].byDate[r.date] = {
-        p: r.picked || 0, // Picked count set once per unique date per hub
+        p: r.picked || 0,
         a:0,
         e:0,
         ar:0,
@@ -1168,7 +1176,6 @@ function renderSec(sec){
     agg[key].byDate[r.date].t += countVal;
   });
 
-  // Consolidate hub-level totals from date breakdown
   Object.values(agg).forEach(h => {
     Object.values(h.byDate).forEach(d => {
       h.p += d.p;
@@ -1238,7 +1245,7 @@ function renderSec(sec){
 
   const formatValue = value => {
     if(showAverage){
-      return (value / periodDays).toLocaleString(undefined, {
+      return ((value || 0) / periodDays).toLocaleString(undefined, {
         minimumFractionDigits:1,
         maximumFractionDigits:1
       });
@@ -1370,35 +1377,18 @@ function doSort(sec,col){
 
 function downloadRaw(){
   if(!filtered || !filtered.length){
-    alert('No data to export.');
+    alert("No filtered data available to download.");
     return;
   }
 
-  const keys = Object.keys(filtered[0]);
-  const csvRows = [];
+  const worksheet = XLSX.utils.json_to_sheet(filtered);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Raw Data");
 
-  csvRows.push(keys.join(','));
-
-  filtered.forEach(row => {
-    const values = keys.map(k => {
-      const val = row[k] === null || row[k] === undefined ? '' : row[k];
-      return '"' + String(val).replace(/"/g, '""') + '"';
-    });
-    csvRows.push(values.join(','));
-  });
-
-  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-
-  link.setAttribute('href', url);
-  link.setAttribute('download', 'FM_Breach_Data_' + new Date().toISOString().slice(0,10) + '.csv');
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  XLSX.writeFile(workbook, "FM_Breach_Raw_Data.xlsx");
 }
 
-window.addEventListener('DOMContentLoaded', loadData);
+window.onload = loadData;
 
 </script>
 </body>
