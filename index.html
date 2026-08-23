@@ -561,9 +561,9 @@ td.r{
 
     <div class="ptabs" id="tp-kpi">
       <div class="pt on" onclick="setKpiP(1,this)">D-1</div>
-      <div class="pt" onclick="setKpiP(3,this)">Last 3 Days</div>
-      <div class="pt" onclick="setKpiP(5,this)">Last 5 Days</div>
-      <div class="pt" onclick="setKpiP(7,this)">Last 7 Days</div>
+      <div class="pt" onclick="setKpiP(3,this)">L3D</div>
+      <div class="pt" onclick="setKpiP(5,this)">L5D</div>
+      <div class="pt" onclick="setKpiP(7,this)">L7D</div>
       <div class="pt" onclick="setKpiP(999,this)">Overall</div>
     </div>
   </div>
@@ -1032,7 +1032,7 @@ function renderKPIs(){
       '<div class="k-val">' + fmt(cnt(ALL)) + '</div>' +
     '</div>' +
     '<div class="kpi k5">' +
-      '<div class="k-lbl">' + modeLabel + 'Picked Count</div>' +
+      '<div class="k-lbl">' + modeLabel + 'DRR</div>' +
       '<div class="k-val">' + fmt(finalPicked) + '</div>' +
     '</div>' +
     '<div class="kpi k1">' +
