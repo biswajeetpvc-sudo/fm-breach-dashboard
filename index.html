@@ -745,7 +745,6 @@ function init(payload){
   HUB_MAP = {};
   PICKED_MAP = {};
 
-  // 1. First Pass: Build Picked Map & init Hub Map
   if (Array.isArray(pickedDataArray) && pickedDataArray.length > 0) {
     pickedDataArray.forEach(row => {
       const hubName = String(row.Hub || row.hub || row.HUB || row['Hub Name'] || '').trim();
@@ -766,14 +765,12 @@ function init(payload){
     });
   }
 
-  // 2. Second Pass: Build RAW breach data & enrich Hub Map meta
   RAW = rows.map(r => {
     const hubName = String(r.ph || r.hub || r.HUB || r['Hub Name'] || '').trim();
     const hubNorm = hubName.toLowerCase();
     const date = normalizeDateStr(r.date || r.Date || '');
     const mapKey = hubNorm + '||' + date;
 
-    // Update Hub Map with mapping hierarchies
     if (!HUB_MAP[hubNorm] || !HUB_MAP[hubNorm].zone) {
       HUB_MAP[hubNorm] = {
         ph: hubName,
@@ -784,9 +781,8 @@ function init(payload){
       };
     }
 
-    // Capture fallback total_picked if missing from Picked sheet
     if (PICKED_MAP[mapKey] === undefined) {
-       PICKED_MAP[mapKey] = Number(r.total_picked || r.picked || r.picked_count || 0);
+        PICKED_MAP[mapKey] = Number(r.total_picked || r.picked || r.picked_count || 0);
     }
 
     return {
@@ -797,7 +793,6 @@ function init(payload){
     };
   });
 
-  // Extract all known dates from both breach rows & picked sheet
   const rawDates = RAW.map(r => r.date);
   const pickedDates = Object.keys(PICKED_MAP).map(k => k.split('||')[1]);
   DATES = [...new Set([...rawDates, ...pickedDates])].filter(Boolean).sort((a,b) => dv(b) - dv(a));
@@ -932,7 +927,6 @@ function applyFilters(){
   const type = fv('f-type');
   const ad = activeDates();
 
-  // Filter breach data
   filtered = RAW.filter(r =>
     ad.has(normalizeDateStr(r.date)) &&
     (!zone || r.zone === zone) &&
@@ -969,7 +963,6 @@ function setKpiP(days,el){
   renderCharts();
 }
 
-// Compute independent Hub Pickups applying identical filters to the RAW mapped dictionary
 function computeHubPickups(datesSet) {
   const hubDateMap = {};
   const hubTotals = {};
@@ -1146,12 +1139,10 @@ function renderSec(sec){
   const periodDays = ds.size || 1;
   const showAverage = periodDays > 1;
 
-  // 1. Get filtered Hub Totals explicitly calculating all unbreached pickups
   const { hubTotals, hubDateMap } = computeHubPickups(ds);
   const rows = filtered.filter(r => ds.has(normalizeDateStr(r.date)) && buckets.includes(r.bucket));
   const agg = {};
 
-  // 2. Initialize the table payload directly from all valid filtered hubs (even if they have 0 breach)
   Object.keys(hubTotals).forEach(hubNorm => {
     const meta = HUB_MAP[hubNorm] || {};
     agg[hubNorm] = {
@@ -1166,7 +1157,6 @@ function renderSec(sec){
     };
   });
 
-  // 3. Inject breach lines sequentially
   rows.forEach(r => {
     const hubNorm = String(r.ph || '').trim().toLowerCase();
     const rDate = normalizeDateStr(r.date);
@@ -1195,7 +1185,6 @@ function renderSec(sec){
     agg[hubNorm].byDate[rDate].t += countVal;
   });
 
-  // 4. Inject 0 breach days into the dropdown correctly mapped
   Object.keys(hubDateMap).forEach(key => {
     const [hubNorm, dStr] = key.split('||');
     if(agg[hubNorm] && !agg[hubNorm].byDate[dStr]){
@@ -1203,7 +1192,6 @@ function renderSec(sec){
     }
   });
 
-  // 5. Aggregate final bounds
   Object.values(agg).forEach(h => {
     Object.values(h.byDate).forEach(d => {
       h.a += d.a; h.e += d.e; h.ar += d.ar; h.d += d.d; h.t += d.t;
@@ -1253,80 +1241,128 @@ function renderSec(sec){
     if(sR) html += '<td class="r">' + formatValue(d.ar) + '</td>';
     if(sD) html += '<td class="r">' + formatValue(d.d) + '</td>';
     html += '<td class="r" style="color:var(--blue);font-weight:700">' + formatValue(d.t) + '</td>';
-    html += '<td class="r" style="color:var(--red);font-weight:700">' + pct(d.t, d.p) + '</td>';
-
-    const avgPickup = ((d.a || 0) + (d.e || 0) + (d.ar || 0)) / periodDays;
-    const avgDispatch = (d.d || 0) / periodDays;
-    const suggestion = avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
-    html += '<td style="font-weight:600;color:var(--navy2)">' + suggestion + '</td>';
+    html += '<td class="r">' + pct(d.t, d.p) + '</td>';
     return html;
   };
 
-  const totalCols = 6 + [sA,sE,sR,sD].filter(Boolean).length + 3;
+  const getSuggText = d => {
+    const avgPickup = ((d.a || 0) + (d.e || 0) + (d.ar || 0)) / periodDays;
+    const avgDispatch = (d.d || 0) / periodDays;
+    return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
+  };
+
   let body = '<tbody>';
 
-  hubRows.forEach((r,index) => {
-    const subId = 'sub-' + sec + '-' + index;
-    const btnId = 'btn-' + sec + '-' + index;
+  hubRows.forEach((r, idx) => {
+    const rowId = 'sub-' + sec + '-' + idx;
+    const sugg = getSuggText(r);
 
-    const dateList = Object.keys(r.byDate).sort((a,b) => dv(b) - dv(a));
-    let dateRows = '';
+    body += '<tr>' +
+      '<td><span class="expand-btn" onclick="toggleRow(\'' + rowId + '\', this)">+</span> ' + r.ph + '</td>' +
+      '<td>' + zbadge(r.zone) + '</td>' +
+      '<td>' + (r.gm || '-') + '</td>' +
+      '<td>' + (r.rm || '-') + '</td>' +
+      '<td>' + (r.am || '-') + '</td>' +
+      cells(r) +
+      '<td style="font-weight:600;color:' + (sugg.includes('24') ? 'var(--amber)' : 'var(--blue)') + '">' + sugg + '</td>' +
+      '</tr>';
 
-    dateList.forEach(date => {
-      const data = r.byDate[date];
-      dateRows += '<tr><td style="font-weight:600;color:var(--navy2)">' + date + '</td><td class="r" style="color:var(--teal);font-weight:700">' + N(data.p) + '</td>';
-      if(sA) dateRows += '<td class="r">' + N(data.a) + '</td>';
-      if(sE) dateRows += '<td class="r">' + N(data.e) + '</td>';
-      if(sR) dateRows += '<td class="r">' + N(data.ar) + '</td>';
-      if(sD) dateRows += '<td class="r">' + N(data.d) + '</td>';
-      dateRows += '<td class="r" style="color:var(--blue);font-weight:700">' + N(data.t) + '</td><td class="r" style="color:var(--red);font-weight:700">' + pct(data.t, data.p) + '</td></tr>';
-    });
+    // Strictly filter sub-table to ONLY show dates with total breaches > 0
+    const breachOnlyDates = Object.keys(r.byDate)
+      .filter(dk => (r.byDate[dk].t || 0) > 0)
+      .sort((a,b) => dv(b) - dv(a));
 
-    body += '<tr><td><span class="expand-btn" id="' + btnId + '" onclick="toggleSubTable(\'' + subId + '\',\'' + btnId + '\')">+</span>' + (r.ph || 'N/A') + '</td>' +
-      '<td>' + zbadge(r.zone) + '</td><td>' + (r.gm || '') + '</td><td>' + (r.rm || '') + '</td><td>' + (r.am || '') + '</td>' + cells(r) + '</tr>';
+    let subHtml = '<tr id="' + rowId + '" style="display:none;"><td colspan="13">' +
+      '<div class="sub-table-container"><strong>Breach Days Breakdown for ' + r.ph + '</strong>';
 
-    body += '<tr id="' + subId + '" style="display:none;"><td colspan="' + totalCols + '">' +
-      '<div class="sub-table-container"><div style="font-weight:700;font-size:11px;color:var(--navy2);">Date-wise Breach Breakdown</div>' +
-      '<table class="sub-table"><thead><tr><th>Date</th><th class="r">Picked</th>';
-    if(sA) body += '<th class="r">Attempt</th>';
-    if(sE) body += '<th class="r">EKL</th>';
-    if(sR) body += '<th class="r">Auto Reset</th>';
-    if(sD) body += '<th class="r">Dispatch</th>';
-    body += '<th class="r">Total</th><th class="r">Breach %</th></tr></thead><tbody>' + dateRows + '</tbody></table></div></td></tr>';
+    if (breachOnlyDates.length === 0) {
+      subHtml += '<div style="padding:8px 0; color:var(--green); font-weight:600;">✓ No breaches recorded for this hub in the selected period.</div>';
+    } else {
+      subHtml += '<table class="sub-table"><thead><tr><th>Breach Date</th><th class="r">Picked</th>';
+      
+      if(sA) subHtml += '<th class="r">Attempt</th>';
+      if(sE) subHtml += '<th class="r">EKL</th>';
+      if(sR) subHtml += '<th class="r">Auto Reset</th>';
+      if(sD) subHtml += '<th class="r">Dispatch</th>';
+      subHtml += '<th class="r">Total Breaches</th><th class="r">Breach %</th></tr></thead><tbody>';
+
+      breachOnlyDates.forEach(dk => {
+        const dd = r.byDate[dk];
+        subHtml += '<tr>' +
+          '<td>' + dk + '</td>' +
+          '<td class="r">' + N(dd.p) + '</td>';
+        if(sA) subHtml += '<td class="r">' + N(dd.a) + '</td>';
+        if(sE) subHtml += '<td class="r">' + N(dd.e) + '</td>';
+        if(sR) subHtml += '<td class="r">' + N(dd.ar) + '</td>';
+        if(sD) subHtml += '<td class="r">' + N(dd.d) + '</td>';
+        subHtml += '<td class="r" style="font-weight:700; color:var(--red);">' + N(dd.t) + '</td>' +
+          '<td class="r">' + pct(dd.t, dd.p) + '</td>' +
+          '</tr>';
+      });
+
+      subHtml += '</tbody></table>';
+    }
+
+    subHtml += '</div></td></tr>';
+    body += subHtml;
   });
 
-  body += '<tr class="rt"><td colspan="5">Grand Total</td>' + cells(gt) + '</tr></tbody>';
+  const gtSugg = getSuggText(gt);
+  body += '<tr class="rt">' +
+    '<td colspan="5">GRAND TOTAL</td>' +
+    cells(gt) +
+    '<td style="font-weight:700">' + gtSugg + '</td>' +
+    '</tr></tbody>';
+
   tbl.innerHTML = header + body;
 }
 
-function toggleSubTable(subId, btnId) {
-  const row = document.getElementById(subId);
-  const btn = document.getElementById(btnId);
-  if (!row || !btn) return;
-  if (row.style.display === 'none') {
-    row.style.display = 'table-row';
+function toggleRow(rowId, btn) {
+  const targetRow = document.getElementById(rowId);
+  if (targetRow.style.display === 'none') {
+    targetRow.style.display = 'table-row';
     btn.textContent = '-';
   } else {
-    row.style.display = 'none';
+    targetRow.style.display = 'none';
     btn.textContent = '+';
   }
 }
 
 function doSort(sec, col) {
-  if (sortState[sec].col === col) sortState[sec].asc = !sortState[sec].asc;
-  else { sortState[sec].col = col; sortState[sec].asc = true; }
+  if (sortState[sec].col === col) {
+    sortState[sec].asc = !sortState[sec].asc;
+  } else {
+    sortState[sec].col = col;
+    sortState[sec].asc = true;
+  }
   renderSec(sec);
 }
 
 function downloadRaw() {
-  if (!filtered || !filtered.length) { alert('No data to export.'); return; }
-  const ws = XLSX.utils.json_to_sheet(filtered);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Raw Data");
-  XLSX.writeFile(wb, "FM_Breach_Raw_Data.xlsx");
+  if (!filtered.length) {
+    alert("No data available to download.");
+    return;
+  }
+  const headers = Object.keys(filtered[0]);
+  const csvRows = [headers.join(',')];
+
+  filtered.forEach(row => {
+    const values = headers.map(header => {
+      const val = row[header] === undefined || row[header] === null ? '' : row[header];
+      return '"' + String(val).replace(/"/g, '""') + '"';
+    });
+    csvRows.push(values.join(','));
+  });
+
+  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.setAttribute('href', url);
+  a.setAttribute('download', 'breach_filtered_export.csv');
+  a.click();
 }
 
-window.onload = loadData;
+window.addEventListener('DOMContentLoaded', loadData);
 </script>
 </body>
 </html>
