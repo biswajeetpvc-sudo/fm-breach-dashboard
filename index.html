@@ -634,7 +634,7 @@ td.r{
     <div class="card-head">
       <div class="card-title">
         <span class="dot d2"></span>
-        Dispatch Breach
+        Dispatch Breach (CPD Source)
       </div>
       <div class="ptabs" id="tp2">
         <div class="pt on" onclick="setP(2,1,this)">D-1</div>
@@ -661,10 +661,13 @@ const ALL = [BA,BE,BR,BD];
 const PICKUP = [BA,BE,BR];
 
 let RAW = [];
+let CPD_RAW = [];
 let PICKED_MAP = {}; 
+let CPD_PICKED_MAP = {}; 
 let HUB_MAP = {}; 
 let DATES = [];
 let filtered = [];
+let cpdFiltered = [];
 
 let periods = [1,1,1];
 let kpiPeriod = 1;
@@ -685,7 +688,9 @@ function N(num) {
 }
 
 function pct(t, p) {
-  if (!p || p === 0) return '0.00%';
+  if (!p || p === 0) {
+    return t > 0 ? 'N/A' : '0.00%';
+  }
   return ((t / p) * 100).toFixed(2) + '%';
 }
 
@@ -716,9 +721,20 @@ async function loadData(){
     const response = await fetch('data.json?v=' + Date.now(), { cache: "no-store" });
     if(!response.ok) throw new Error('HTTP ' + response.status);
     const payload = await response.json();
-    init(payload);
+
+    let cpdPayload = null;
+    try {
+      const cpdResponse = await fetch('cpd_data.json?v=' + Date.now(), { cache: "no-store" });
+      if (cpdResponse.ok) {
+        cpdPayload = await cpdResponse.json();
+      }
+    } catch(err) {
+      console.warn("cpd_data.json not loaded, defaulting to main dataset:", err);
+    }
+
+    init(payload, cpdPayload);
   }catch(e){
-    setS('err', 'Failed to load data.json: ' + e.message);
+    setS('err', 'Failed to load dataset: ' + e.message);
   }
 }
 
@@ -731,9 +747,10 @@ function dv(s){
   return new Date(p[2] + '-' + p[1] + '-' + p[0]).getTime();
 }
 
-function init(payload){
+function processDataSet(payload) {
   let rows = [];
   let pickedDataArray = [];
+  let pickedMap = {};
 
   if (Array.isArray(payload)) {
     rows = payload;
@@ -741,9 +758,6 @@ function init(payload){
     rows = payload.breach_data || payload.data || [];
     pickedDataArray = payload.picked_data || payload.Picked_Data || payload.pickedData || [];
   }
-
-  HUB_MAP = {};
-  PICKED_MAP = {};
 
   if (Array.isArray(pickedDataArray) && pickedDataArray.length > 0) {
     pickedDataArray.forEach(row => {
@@ -759,13 +773,13 @@ function init(payload){
         if (key.toLowerCase() !== 'hub' && key.toLowerCase() !== 'hub name') {
           const formattedDate = normalizeDateStr(key);
           const mapKey = hubNorm + '||' + formattedDate;
-          PICKED_MAP[mapKey] = Number(row[key]) || 0;
+          pickedMap[mapKey] = Number(row[key]) || 0;
         }
       });
     });
   }
 
-  RAW = rows.map(r => {
+  const processedRows = rows.map(r => {
     const hubName = String(r.ph || r.hub || r.HUB || r['Hub Name'] || '').trim();
     const hubNorm = hubName.toLowerCase();
     const date = normalizeDateStr(r.date || r.Date || '');
@@ -781,28 +795,49 @@ function init(payload){
       };
     }
 
-    if (PICKED_MAP[mapKey] === undefined) {
-        PICKED_MAP[mapKey] = Number(r.total_picked || r.picked || r.picked_count || 0);
+    if (pickedMap[mapKey] === undefined) {
+      pickedMap[mapKey] = Number(r.total_picked || r.picked || r.picked_count || 0);
     }
 
     return {
       ...r,
       ph: hubName,
       date: date,
-      picked: PICKED_MAP[mapKey]
+      picked: pickedMap[mapKey]
     };
   });
 
+  return { rows: processedRows, pickedMap };
+}
+
+function init(payload, cpdPayload){
+  HUB_MAP = {};
+
+  const mainData = processDataSet(payload);
+  RAW = mainData.rows;
+  PICKED_MAP = mainData.pickedMap;
+
+  if (cpdPayload) {
+    const cpdData = processDataSet(cpdPayload);
+    CPD_RAW = cpdData.rows;
+    CPD_PICKED_MAP = cpdData.pickedMap;
+  } else {
+    CPD_RAW = RAW;
+    CPD_PICKED_MAP = PICKED_MAP;
+  }
+
   const rawDates = RAW.map(r => r.date);
   const pickedDates = Object.keys(PICKED_MAP).map(k => k.split('||')[1]);
-  DATES = [...new Set([...rawDates, ...pickedDates])].filter(Boolean).sort((a,b) => dv(b) - dv(a));
+  const cpdDates = CPD_RAW.map(r => r.date);
+
+  DATES = [...new Set([...rawDates, ...pickedDates, ...cpdDates])].filter(Boolean).sort((a,b) => dv(b) - dv(a));
   
   selectedDates = new Set();
 
   document.getElementById('hdr-meta').textContent =
     DATES.length + ' dates · ' +
     RAW.length.toLocaleString() +
-    ' breaches · Latest: ' + (DATES[0] || 'N/A');
+    ' main breaches · Latest: ' + (DATES[0] || 'N/A');
 
   if (DATES.length > 0) {
     document.getElementById('last-upd').textContent = 'Last updated: ' + DATES[0];
@@ -811,7 +846,7 @@ function init(payload){
   buildFilters();
   applyFilters();
 
-  setS('ok', '✓ Ready — ' + RAW.length.toLocaleString() + ' records across ' + DATES.length + ' dates');
+  setS('ok', '✓ Ready — ' + RAW.length.toLocaleString() + ' records loaded');
 }
 
 const fv = id => document.getElementById(id).value;
@@ -918,7 +953,7 @@ function resetFilters(){
   applyFilters();
 }
 
-function applyFilters(){
+function filterDataset(sourceArray) {
   const zone = fv('f-zone');
   const gm = fv('f-gm');
   const rm = fv('f-rm');
@@ -927,7 +962,7 @@ function applyFilters(){
   const type = fv('f-type');
   const ad = activeDates();
 
-  filtered = RAW.filter(r =>
+  return sourceArray.filter(r =>
     ad.has(normalizeDateStr(r.date)) &&
     (!zone || r.zone === zone) &&
     (!gm || r.gm === gm) &&
@@ -936,6 +971,11 @@ function applyFilters(){
     (!ph || r.ph === ph) &&
     (type !== 'cpd' || r.cpd)
   );
+}
+
+function applyFilters(){
+  filtered = filterDataset(RAW);
+  cpdFiltered = filterDataset(CPD_RAW);
 
   renderKPIs();
   renderCharts();
@@ -963,7 +1003,7 @@ function setKpiP(days,el){
   renderCharts();
 }
 
-function computeHubPickups(datesSet) {
+function computeHubPickups(datesSet, targetMap = PICKED_MAP) {
   const hubDateMap = {};
   const hubTotals = {};
   let overallTotal = 0;
@@ -974,7 +1014,7 @@ function computeHubPickups(datesSet) {
   const fAm = fv('f-am');
   const fPh = fv('f-ph');
 
-  Object.keys(PICKED_MAP).forEach(key => {
+  Object.keys(targetMap).forEach(key => {
     const [hubNorm, dateStr] = key.split('||');
 
     if (!datesSet.has(dateStr)) return;
@@ -987,7 +1027,7 @@ function computeHubPickups(datesSet) {
     if (fAm && meta.am !== fAm) return;
     if (fPh && meta.ph !== fPh) return; 
 
-    const val = PICKED_MAP[key];
+    const val = targetMap[key];
     hubDateMap[key] = val;
     hubTotals[hubNorm] = (hubTotals[hubNorm] || 0) + val;
     overallTotal += val;
@@ -1001,15 +1041,17 @@ function renderKPIs(){
   const periodDays = ds.size || 1;
   const isAvg = kpiMode === 'avg' && periodDays > 1;
 
-  const rows = filtered.filter(r => ds.has(normalizeDateStr(r.date)));
+  const mainRows = filtered.filter(r => ds.has(normalizeDateStr(r.date)));
+  const cpdRows = cpdFiltered.filter(r => ds.has(normalizeDateStr(r.date)));
 
-  const cnt = buckets => {
-    const sum = rows.filter(r => buckets.includes(r.bucket))
+  const cnt = (buckets, isCpd = false) => {
+    const targetRows = isCpd ? cpdRows : mainRows;
+    const sum = targetRows.filter(r => buckets.includes(r.bucket))
                     .reduce((total, r) => total + (r.cnt || 0), 0);
     return isAvg ? (sum / periodDays) : sum;
   };
 
-  const { overallTotal } = computeHubPickups(ds);
+  const { overallTotal } = computeHubPickups(ds, PICKED_MAP);
   const finalPicked = isAvg ? (overallTotal / periodDays) : overallTotal;
 
   const periodLabel = kpiPeriod === 1 ? 'D-1' : kpiPeriod === 999 ? 'Overall' : 'Last ' + kpiPeriod + ' Days';
@@ -1019,10 +1061,12 @@ function renderKPIs(){
     ? val.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
     : N(val);
 
+  const totalBreaches = cnt([BA, BE, BR], false) + cnt([BD], true);
+
   document.getElementById('kpi-bar').innerHTML =
     '<div class="kpi k0">' +
       '<div class="k-lbl">' + modeLabel + 'Total Breaches (' + periodLabel + ')</div>' +
-      '<div class="k-val">' + fmt(cnt(ALL)) + '</div>' +
+      '<div class="k-val">' + fmt(totalBreaches) + '</div>' +
     '</div>' +
     '<div class="kpi k5">' +
       '<div class="k-lbl">' + modeLabel + 'DRR</div>' +
@@ -1041,44 +1085,54 @@ function renderKPIs(){
       '<div class="k-val">' + fmt(cnt([BR])) + '</div>' +
     '</div>' +
     '<div class="kpi k4">' +
-      '<div class="k-lbl">' + modeLabel + 'Dispatch Breach</div>' +
-      '<div class="k-val">' + fmt(cnt([BD])) + '</div>' +
+      '<div class="k-lbl">' + modeLabel + 'Dispatch Breach (CPD)</div>' +
+      '<div class="k-val">' + fmt(cnt([BD], true)) + '</div>' +
     '</div>';
 }
 
 function renderCharts(){
   const ds = datesForN(kpiPeriod);
-  const rows = filtered.filter(r => ds.has(normalizeDateStr(r.date)));
-  const tDates = [...new Set(rows.map(r => normalizeDateStr(r.date)))].sort((a,b) => dv(a) - dv(b));
+  const mainRows = filtered.filter(r => ds.has(normalizeDateStr(r.date)));
+  const cpdRows = cpdFiltered.filter(r => ds.has(normalizeDateStr(r.date)));
 
-  const getCount = (date,bucket) =>
-    rows.filter(r => normalizeDateStr(r.date) === date && r.bucket === bucket)
-        .reduce((sum,r) => sum + (r.cnt || 0), 0);
+  const allDatesList = [...new Set([
+    ...mainRows.map(r => normalizeDateStr(r.date)),
+    ...cpdRows.map(r => normalizeDateStr(r.date))
+  ])].sort((a,b) => dv(a) - dv(b));
+
+  const getCount = (date, bucket) => {
+    const targetRows = (bucket === BD) ? cpdRows : mainRows;
+    return targetRows.filter(r => normalizeDateStr(r.date) === date && r.bucket === bucket)
+                     .reduce((sum,r) => sum + (r.cnt || 0), 0);
+  };
 
   if(chartTrend) chartTrend.destroy();
   chartTrend = new Chart(document.getElementById('chart-trend').getContext('2d'), {
     type:'bar',
     data:{
-      labels:tDates,
+      labels:allDatesList,
       datasets:[
-        { label:'Attempt', data:tDates.map(d => getCount(d,BA)), backgroundColor:'#DC2626', stack:'s' },
-        { label:'EKL', data:tDates.map(d => getCount(d,BE)), backgroundColor:'#7C3AED', stack:'s' },
-        { label:'Auto Reset', data:tDates.map(d => getCount(d,BR)), backgroundColor:'#059669', stack:'s' },
-        { label:'Dispatch', data:tDates.map(d => getCount(d,BD)), backgroundColor:'#D97706', stack:'s' }
+        { label:'Attempt', data:allDatesList.map(d => getCount(d,BA)), backgroundColor:'#DC2626', stack:'s' },
+        { label:'EKL', data:allDatesList.map(d => getCount(d,BE)), backgroundColor:'#7C3AED', stack:'s' },
+        { label:'Auto Reset', data:allDatesList.map(d => getCount(d,BR)), backgroundColor:'#059669', stack:'s' },
+        { label:'Dispatch (CPD)', data:allDatesList.map(d => getCount(d,BD)), backgroundColor:'#D97706', stack:'s' }
       ]
     },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } } }
   });
 
-  const mix = [BA,BE,BR,BD].map(bucket =>
-    rows.filter(r => r.bucket === bucket).reduce((sum,r) => sum + (r.cnt || 0), 0)
-  );
+  const mix = [
+    mainRows.filter(r => r.bucket === BA).reduce((sum,r) => sum + (r.cnt || 0), 0),
+    mainRows.filter(r => r.bucket === BE).reduce((sum,r) => sum + (r.cnt || 0), 0),
+    mainRows.filter(r => r.bucket === BR).reduce((sum,r) => sum + (r.cnt || 0), 0),
+    cpdRows.filter(r => r.bucket === BD).reduce((sum,r) => sum + (r.cnt || 0), 0)
+  ];
 
   if(chartMix) chartMix.destroy();
   chartMix = new Chart(document.getElementById('chart-mix').getContext('2d'), {
     type:'doughnut',
     data:{
-      labels:['Attempt', 'EKL Issue', 'Auto Reset', 'Dispatch'],
+      labels:['Attempt', 'EKL Issue', 'Auto Reset', 'Dispatch (CPD)'],
       datasets:[{ data:mix, backgroundColor:['#DC2626', '#7C3AED', '#059669', '#D97706'] }]
     },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } } }
@@ -1119,6 +1173,7 @@ function sortRows(rows,col,asc,buckets,periodDays){
   }
 
   const getSuggVal = r => {
+    if (!r.t || r.t === 0 || !r.p || r.p === 0) return 'No buffer required';
     const avgPickup = ((r.a || 0) + (r.e || 0) + (r.ar || 0)) / (periodDays || 1);
     const avgDispatch = (r.d || 0) / (periodDays || 1);
     return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
@@ -1134,13 +1189,17 @@ function sortRows(rows,col,asc,buckets,periodDays){
 }
 
 function renderSec(sec){
+  const isDispatchSec = (sec === 2);
   const buckets = sec === 0 ? ALL : sec === 1 ? PICKUP : [BD];
   const ds = datesForN(periods[sec]);
   const periodDays = ds.size || 1;
   const showAverage = periodDays > 1;
 
-  const { hubTotals, hubDateMap } = computeHubPickups(ds);
-  const rows = filtered.filter(r => ds.has(normalizeDateStr(r.date)) && buckets.includes(r.bucket));
+  const targetPickedMap = isDispatchSec ? CPD_PICKED_MAP : PICKED_MAP;
+  const targetFilteredRows = isDispatchSec ? cpdFiltered : filtered;
+
+  const { hubTotals, hubDateMap } = computeHubPickups(ds, targetPickedMap);
+  const rows = targetFilteredRows.filter(r => ds.has(normalizeDateStr(r.date)) && buckets.includes(r.bucket));
   const agg = {};
 
   Object.keys(hubTotals).forEach(hubNorm => {
@@ -1246,9 +1305,18 @@ function renderSec(sec){
   };
 
   const getSuggText = d => {
+    if (!d.t || d.t === 0 || !d.p || d.p === 0) {
+      return 'No buffer required';
+    }
     const avgPickup = ((d.a || 0) + (d.e || 0) + (d.ar || 0)) / periodDays;
     const avgDispatch = (d.d || 0) / periodDays;
     return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
+  };
+
+  const getSuggStyle = sugg => {
+    if (sugg === 'No buffer required') return 'color:var(--green)';
+    if (sugg.includes('24')) return 'color:var(--amber)';
+    return 'color:var(--blue)';
   };
 
   let body = '<tbody>';
@@ -1264,10 +1332,9 @@ function renderSec(sec){
       '<td>' + (r.rm || '-') + '</td>' +
       '<td>' + (r.am || '-') + '</td>' +
       cells(r) +
-      '<td style="font-weight:600;color:' + (sugg.includes('24') ? 'var(--amber)' : 'var(--blue)') + '">' + sugg + '</td>' +
+      '<td style="font-weight:600;' + getSuggStyle(sugg) + '">' + sugg + '</td>' +
       '</tr>';
 
-    // Strictly filter sub-table to ONLY show dates with total breaches > 0
     const breachOnlyDates = Object.keys(r.byDate)
       .filter(dk => (r.byDate[dk].t || 0) > 0)
       .sort((a,b) => dv(b) - dv(a));
@@ -1311,7 +1378,7 @@ function renderSec(sec){
   body += '<tr class="rt">' +
     '<td colspan="5">GRAND TOTAL</td>' +
     cells(gt) +
-    '<td style="font-weight:700">' + gtSugg + '</td>' +
+    '<td style="font-weight:700;' + getSuggStyle(gtSugg) + '">' + gtSugg + '</td>' +
     '</tr></tbody>';
 
   tbl.innerHTML = header + body;
@@ -1339,14 +1406,15 @@ function doSort(sec, col) {
 }
 
 function downloadRaw() {
-  if (!filtered.length) {
+  const dataToExport = filtered.concat(cpdFiltered);
+  if (!dataToExport.length) {
     alert("No data available to download.");
     return;
   }
-  const headers = Object.keys(filtered[0]);
+  const headers = Object.keys(dataToExport[0]);
   const csvRows = [headers.join(',')];
 
-  filtered.forEach(row => {
+  dataToExport.forEach(row => {
     const values = headers.map(header => {
       const val = row[header] === undefined || row[header] === null ? '' : row[header];
       return '"' + String(val).replace(/"/g, '""') + '"';
