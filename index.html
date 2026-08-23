@@ -689,7 +689,7 @@ function N(num) {
 
 function pct(t, p) {
   if (!p || p === 0) {
-    return t > 0 ? 'N/A' : '0.00%';
+    return t > 0 ? '100%' : '0.00%';
   }
   return ((t / p) * 100).toFixed(2) + '%';
 }
