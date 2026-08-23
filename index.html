@@ -1112,10 +1112,10 @@ function renderCharts(){
     data:{
       labels:allDatesList,
       datasets:[
-        { label:'Attempt', data:allDatesList.map(d => getCount(d,BA)), backgroundColor:'#DC2626', stack:'s' },
-        { label:'EKL', data:allDatesList.map(d => getCount(d,BE)), backgroundColor:'#7C3AED', stack:'s' },
-        { label:'Auto Reset', data:allDatesList.map(d => getCount(d,BR)), backgroundColor:'#059669', stack:'s' },
-        { label:'Dispatch (CPD)', data:allDatesList.map(d => getCount(d,BD)), backgroundColor:'#D97706', stack:'s' }
+        { label:'Attempt', data:allDatesList.map(d => getCount(d,BA)), backgroundColor:'#FCA5A5', stack:'s' },
+        { label:'EKL', data:allDatesList.map(d => getCount(d,BE)), backgroundColor:'#FCD34D', stack:'s' },
+        { label:'Auto Reset', data:allDatesList.map(d => getCount(d,BR)), backgroundColor:'#FFB6C1', stack:'s' },
+        { label:'Dispatch', data:allDatesList.map(d => getCount(d,BD)), backgroundColor:'#FDBA74', stack:'s' }
       ]
     },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } } }
@@ -1132,8 +1132,8 @@ function renderCharts(){
   chartMix = new Chart(document.getElementById('chart-mix').getContext('2d'), {
     type:'doughnut',
     data:{
-      labels:['Attempt', 'EKL Issue', 'Auto Reset', 'Dispatch (CPD)'],
-      datasets:[{ data:mix, backgroundColor:['#DC2626', '#7C3AED', '#059669', '#D97706'] }]
+      labels:['Attempt', 'EKL Issue', 'Auto Reset', 'Dispatch'],
+      datasets:[{ data:mix, backgroundColor: ['#FCA5A5', '#FCD34D', '#FFB6C1', '#FDBA74'] }]
     },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } } }
   });
