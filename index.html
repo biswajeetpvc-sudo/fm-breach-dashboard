@@ -1112,10 +1112,10 @@ function renderCharts(){
     data:{
       labels:allDatesList,
       datasets:[
-        { label:'Attempt', data:allDatesList.map(d => getCount(d,BA)), backgroundColor:'#FCA5A5', stack:'s' },
+        { label:'Attempt', data:allDatesList.map(d => getCount(d,BA)), backgroundColor:'#FF6B6B', stack:'s' },
         { label:'EKL', data:allDatesList.map(d => getCount(d,BE)), backgroundColor:'#FCD34D', stack:'s' },
         { label:'Auto Reset', data:allDatesList.map(d => getCount(d,BR)), backgroundColor:'#FFB6C1', stack:'s' },
-        { label:'Dispatch', data:allDatesList.map(d => getCount(d,BD)), backgroundColor:'#FDBA74', stack:'s' }
+        { label:'Dispatch', data:allDatesList.map(d => getCount(d,BD)), backgroundColor:'#C4A484', stack:'s' }
       ]
     },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } } }
@@ -1133,7 +1133,7 @@ function renderCharts(){
     type:'doughnut',
     data:{
       labels:['Attempt', 'EKL Issue', 'Auto Reset', 'Dispatch'],
-      datasets:[{ data:mix, backgroundColor: ['#FCA5A5', '#FCD34D', '#FFB6C1', '#FDBA74'] }]
+      datasets:[{ data:mix, backgroundColor: ['#FF6B6B', '#FCD34D', '#FFB6C1', '#C4A484'] }]
     },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } } }
   });
