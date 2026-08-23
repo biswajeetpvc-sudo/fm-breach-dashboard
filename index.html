@@ -884,7 +884,6 @@ function buildDateList(){
       else selectedDates.delete(d);
       
       if(selectedDates.size === DATES.length) selectedDates = new Set();
-      if(selectedDates.size === 0 && !chk.checked) selectedDates = new Set(['__none__']);
       
       updateDateBtnLabel();
       applyFilters();
@@ -970,7 +969,7 @@ function filterDataset(sourceArray) {
     (!rm || r.rm === rm) &&
     (!am || r.am === am) &&
     (!ph || r.ph === ph) &&
-    (type !== 'cpd' || r.cpd || r.bucket === BD)
+    (type !== 'cpd' || r.cpd)
   );
 }
 
@@ -1048,7 +1047,7 @@ function renderKPIs(){
   const cnt = (buckets, isCpd = false) => {
     const targetRows = isCpd ? cpdRows : mainRows;
     const sum = targetRows.filter(r => buckets.includes(r.bucket))
-                          .reduce((total, r) => total + (r.cnt || 0), 0);
+                    .reduce((total, r) => total + (r.cnt || 0), 0);
     return isAvg ? (sum / periodDays) : sum;
   };
 
@@ -1184,12 +1183,7 @@ function sortRows(rows,col,asc,buckets,periodDays){
     let av = key === 'bp' ? (a.p ? (a.t / a.p) : 0) : key === 'sugg' ? getSuggVal(a) : a[key];
     let bv = key === 'bp' ? (b.p ? (b.t / b.p) : 0) : key === 'sugg' ? getSuggVal(b) : b[key];
 
-    if(av === undefined || av === null) av = '';
-    if(bv === undefined || bv === null) bv = '';
-
-    if(typeof av === 'string' || typeof bv === 'string') {
-      return asc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
-    }
+    if(typeof av === 'string') return asc ? av.localeCompare(bv) : bv.localeCompare(av);
     return asc ? av - bv : bv - av;
   });
 }
@@ -1283,106 +1277,122 @@ function renderSec(sec){
   };
 
   const prefix = showAverage ? 'Avg ' : '';
+  let numCI = 5;
 
-  let colIndex = 0;
-  let headHtml = '<thead><tr>';
-  headHtml += thC('Hub (PH)', colIndex++);
-  headHtml += thC('Zone', colIndex++);
-  headHtml += thC('GM', colIndex++);
-  headHtml += thC('RM', colIndex++);
-  headHtml += thC('AM', colIndex++);
-  headHtml += thC(prefix + 'DRR / Picked', colIndex++, 'r');
+  let header = '<thead><tr>' + thC('Hub',0) + thC('Zone',1) + thC('GM',2) + thC('RM',3) + thC('AM',4) + thC(prefix + 'Picked Count', numCI++, 'r');
+  if(sA) header += thC(prefix + 'Attempt Breach', numCI++, 'r');
+  if(sE) header += thC(prefix + 'EKL Issue', numCI++, 'r');
+  if(sR) header += thC(prefix + 'Auto Reset', numCI++, 'r');
+  if(sD) header += thC(prefix + 'Dispatch Breach', numCI++, 'r');
+  header += thC(showAverage ? 'Avg Daily Total' : 'Grand Total', numCI++, 'r') + thC(prefix + 'Breach %', numCI++, 'r') + thC('Suggestion', numCI++) + '</tr></thead>';
 
-  if(sA) headHtml += thC(prefix + 'Attempt', colIndex++, 'r');
-  if(sE) headHtml += thC(prefix + 'EKL Issue', colIndex++, 'r');
-  if(sR) headHtml += thC(prefix + 'Auto Reset', colIndex++, 'r');
-  if(sD) headHtml += thC(prefix + 'Dispatch (CPD)', colIndex++, 'r');
+  const zbadge = z => '<span class="zbadge z-' + (z || 'Unknown') + '">' + (z || '?') + '</span>';
 
-  headHtml += thC(prefix + 'Total Breach', colIndex++, 'r');
-  headHtml += thC('Breach %', colIndex++, 'r');
-  headHtml += thC('SLA Buffer Suggestion', colIndex++);
-  headHtml += '</tr></thead>';
+  const formatValue = value => {
+    if(showAverage) return ((value || 0) / periodDays).toLocaleString(undefined, { minimumFractionDigits:1, maximumFractionDigits:1 });
+    return N(value);
+  };
 
-  const fmtAvg = v => v.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const cells = d => {
+    let html = '<td class="r" style="color:var(--teal);font-weight:700">' + formatValue(d.p) + '</td>';
+    if(sA) html += '<td class="r">' + formatValue(d.a) + '</td>';
+    if(sE) html += '<td class="r">' + formatValue(d.e) + '</td>';
+    if(sR) html += '<td class="r">' + formatValue(d.ar) + '</td>';
+    if(sD) html += '<td class="r">' + formatValue(d.d) + '</td>';
+    html += '<td class="r" style="color:var(--blue);font-weight:700">' + formatValue(d.t) + '</td>';
+    html += '<td class="r">' + pct(d.t, d.p) + '</td>';
+    return html;
+  };
 
-  let bodyHtml = '<tbody>';
+  const getSuggText = d => {
+    if (!d.t || d.t === 0) {
+      return 'No buffer required';
+    }
+    const avgPickup = ((d.a || 0) + (d.e || 0) + (d.ar || 0)) / periodDays;
+    const avgDispatch = (d.d || 0) / periodDays;
+    return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
+  };
 
-  const gtDiv = showAverage ? periodDays : 1;
-  const gtP = showAverage ? (gt.p / gtDiv) : gt.p;
-  const gtA = showAverage ? (gt.a / gtDiv) : gt.a;
-  const gtE = showAverage ? (gt.e / gtDiv) : gt.e;
-  const gtAr = showAverage ? (gt.ar / gtDiv) : gt.ar;
-  const gtD = showAverage ? (gt.d / gtDiv) : gt.d;
-  const gtT = showAverage ? (gt.t / gtDiv) : gt.t;
+  const getSuggStyle = sugg => {
+    if (sugg === 'No buffer required') return 'color:var(--green)';
+    if (sugg.includes('24')) return 'color:var(--amber)';
+    return 'color:var(--blue)';
+  };
 
-  bodyHtml += '<tr class="rt">';
-  bodyHtml += '<td>Grand Total</td><td>-</td><td>-</td><td>-</td><td>-</td>';
-  bodyHtml += '<td class="r">' + (showAverage ? fmtAvg(gtP) : N(gtP)) + '</td>';
-  if(sA) bodyHtml += '<td class="r">' + (showAverage ? fmtAvg(gtA) : N(gtA)) + '</td>';
-  if(sE) bodyHtml += '<td class="r">' + (showAverage ? fmtAvg(gtE) : N(gtE)) + '</td>';
-  if(sR) bodyHtml += '<td class="r">' + (showAverage ? fmtAvg(gtAr) : N(gtAr)) + '</td>';
-  if(sD) bodyHtml += '<td class="r">' + (showAverage ? fmtAvg(gtD) : N(gtD)) + '</td>';
-  bodyHtml += '<td class="r">' + (showAverage ? fmtAvg(gtT) : N(gtT)) + '</td>';
-  bodyHtml += '<td class="r">' + pct(gt.t, gt.p) + '</td>';
-  bodyHtml += '<td>-</td>';
-  bodyHtml += '</tr>';
+  let body = '<tbody>';
 
   hubRows.forEach((r, idx) => {
-    const div = showAverage ? periodDays : 1;
-    const rP = showAverage ? (r.p / div) : r.p;
-    const rA = showAverage ? (r.a / div) : r.a;
-    const rE = showAverage ? (r.e / div) : r.e;
-    const rAr = showAverage ? (r.ar / div) : r.ar;
-    const rD = showAverage ? (r.d / div) : r.d;
-    const rT = showAverage ? (r.t / div) : r.t;
+    const rowId = 'sub-' + sec + '-' + idx;
+    const sugg = getSuggText(r);
 
-    const rowId = `sub_${sec}_${idx}`;
-    const avgPickup = ((r.a || 0) + (r.e || 0) + (r.ar || 0)) / periodDays;
-    const avgDispatch = (r.d || 0) / periodDays;
-    const suggText = (!r.t || r.t === 0) ? 'No buffer required' : (avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer');
+    body += '<tr>' +
+      '<td><span class="expand-btn" onclick="toggleRow(\'' + rowId + '\', this)">+</span> ' + r.ph + '</td>' +
+      '<td>' + zbadge(r.zone) + '</td>' +
+      '<td>' + (r.gm || '-') + '</td>' +
+      '<td>' + (r.rm || '-') + '</td>' +
+      '<td>' + (r.am || '-') + '</td>' +
+      cells(r) +
+      '<td style="font-weight:600;' + getSuggStyle(sugg) + '">' + sugg + '</td>' +
+      '</tr>';
 
-    bodyHtml += '<tr>';
-    bodyHtml += '<td><span class="expand-btn" onclick="toggleRow(\'' + rowId + '\', this)">+</span>' + r.ph + '</td>';
-    bodyHtml += '<td><span class="zbadge z-' + (r.zone || 'Unknown') + '">' + (r.zone || '-') + '</span></td>';
-    bodyHtml += '<td>' + (r.gm || '-') + '</td>';
-    bodyHtml += '<td>' + (r.rm || '-') + '</td>';
-    bodyHtml += '<td>' + (r.am || '-') + '</td>';
-    bodyHtml += '<td class="r">' + (showAverage ? fmtAvg(rP) : N(rP)) + '</td>';
+    const breachOnlyDates = Object.keys(r.byDate)
+      .filter(dk => (r.byDate[dk].t || 0) > 0)
+      .sort((a,b) => dv(b) - dv(a));
 
-    if(sA) bodyHtml += '<td class="r">' + (showAverage ? fmtAvg(rA) : N(rA)) + '</td>';
-    if(sE) bodyHtml += '<td class="r">' + (showAverage ? fmtAvg(rE) : N(rE)) + '</td>';
-    if(sR) bodyHtml += '<td class="r">' + (showAverage ? fmtAvg(rAr) : N(rAr)) + '</td>';
-    if(sD) bodyHtml += '<td class="r">' + (showAverage ? fmtAvg(rD) : N(rD)) + '</td>';
+    let subHtml = '<tr id="' + rowId + '" style="display:none;"><td colspan="13">' +
+      '<div class="sub-table-container"><strong>Breach Days Breakdown for ' + r.ph + '</strong>';
 
-    bodyHtml += '<td class="r">' + (showAverage ? fmtAvg(rT) : N(rT)) + '</td>';
-    bodyHtml += '<td class="r">' + pct(r.t, r.p) + '</td>';
-    bodyHtml += '<td>' + suggText + '</td>';
-    bodyHtml += '</tr>';
+    if (breachOnlyDates.length === 0) {
+      subHtml += '<div style="padding:8px 0; color:var(--green); font-weight:600;">✓ No breaches recorded for this hub in the selected period.</div>';
+    } else {
+      subHtml += '<table class="sub-table"><thead><tr><th>Breach Date</th><th class="r">Picked</th>';
+      
+      if(sA) subHtml += '<th class="r">Attempt</th>';
+      if(sE) subHtml += '<th class="r">EKL</th>';
+      if(sR) subHtml += '<th class="r">Auto Reset</th>';
+      if(sD) subHtml += '<th class="r">Dispatch</th>';
+      subHtml += '<th class="r">Total Breaches</th><th class="r">Breach %</th></tr></thead><tbody>';
 
-    let totalCols = 9 + (sA?1:0) + (sE?1:0) + (sR?1:0) + (sD?1:0);
-    bodyHtml += '<tr id="' + rowId + '" style="display:none;"><td colspan="' + totalCols + '">';
-    bodyHtml += '<div class="sub-table-container"><strong>Date Breakdown:</strong><table class="sub-table"><thead><tr><th>Date</th><th>Picked</th>';
-    if(sA) bodyHtml += '<th>Attempt</th>';
-    if(sE) bodyHtml += '<th>EKL</th>';
-    if(sR) bodyHtml += '<th>Auto Reset</th>';
-    if(sD) bodyHtml += '<th>Dispatch</th>';
-    bodyHtml += '<th>Total</th><th>Breach %</th></tr></thead><tbody>';
+      breachOnlyDates.forEach(dk => {
+        const dd = r.byDate[dk];
+        subHtml += '<tr>' +
+          '<td>' + dk + '</td>' +
+          '<td class="r">' + N(dd.p) + '</td>';
+        if(sA) subHtml += '<td class="r">' + N(dd.a) + '</td>';
+        if(sE) subHtml += '<td class="r">' + N(dd.e) + '</td>';
+        if(sR) subHtml += '<td class="r">' + N(dd.ar) + '</td>';
+        if(sD) subHtml += '<td class="r">' + N(dd.d) + '</td>';
+        subHtml += '<td class="r" style="font-weight:700; color:var(--red);">' + N(dd.t) + '</td>' +
+          '<td class="r">' + pct(dd.t, dd.p) + '</td>' +
+          '</tr>';
+      });
 
-    Object.keys(r.byDate).sort((a,b) => dv(b) - dv(a)).forEach(d => {
-      const db = r.byDate[d];
-      bodyHtml += '<tr><td>' + d + '</td><td>' + N(db.p) + '</td>';
-      if(sA) bodyHtml += '<td>' + N(db.a) + '</td>';
-      if(sE) bodyHtml += '<td>' + N(db.e) + '</td>';
-      if(sR) bodyHtml += '<td>' + N(db.ar) + '</td>';
-      if(sD) bodyHtml += '<td>' + N(db.d) + '</td>';
-      bodyHtml += '<td>' + N(db.t) + '</td><td>' + pct(db.t, db.p) + '</td></tr>';
-    });
+      subHtml += '</tbody></table>';
+    }
 
-    bodyHtml += '</tbody></table></div></td></tr>';
+    subHtml += '</div></td></tr>';
+    body += subHtml;
   });
 
-  bodyHtml += '</tbody>';
-  tbl.innerHTML = headHtml + bodyHtml;
+  const gtSugg = getSuggText(gt);
+  body += '<tr class="rt">' +
+    '<td colspan="5">GRAND TOTAL</td>' +
+    cells(gt) +
+    '<td style="font-weight:700;' + getSuggStyle(gtSugg) + '">' + gtSugg + '</td>' +
+    '</tr></tbody>';
+
+  tbl.innerHTML = header + body;
+}
+
+function toggleRow(rowId, btn) {
+  const targetRow = document.getElementById(rowId);
+  if (targetRow.style.display === 'none') {
+    targetRow.style.display = 'table-row';
+    btn.textContent = '-';
+  } else {
+    targetRow.style.display = 'none';
+    btn.textContent = '+';
+  }
 }
 
 function doSort(sec, col) {
@@ -1395,26 +1405,32 @@ function doSort(sec, col) {
   renderSec(sec);
 }
 
-function toggleRow(id, btn) {
-  const el = document.getElementById(id);
-  if (el.style.display === 'none') {
-    el.style.display = 'table-row';
-    btn.textContent = '-';
-  } else {
-    el.style.display = 'none';
-    btn.textContent = '+';
-  }
-}
-
 function downloadRaw() {
-  if (!RAW.length) return alert('No data loaded to download.');
-  const ws = XLSX.utils.json_to_sheet(RAW);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "RawData");
-  XLSX.writeFile(wb, "FM_Breach_Raw_Data.xlsx");
+  const dataToExport = filtered.concat(cpdFiltered);
+  if (!dataToExport.length) {
+    alert("No data available to download.");
+    return;
+  }
+  const headers = Object.keys(dataToExport[0]);
+  const csvRows = [headers.join(',')];
+
+  dataToExport.forEach(row => {
+    const values = headers.map(header => {
+      const val = row[header] === undefined || row[header] === null ? '' : row[header];
+      return '"' + String(val).replace(/"/g, '""') + '"';
+    });
+    csvRows.push(values.join(','));
+  });
+
+  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.setAttribute('href', url);
+  a.setAttribute('download', 'breach_filtered_export.csv');
+  a.click();
 }
 
-window.onload = loadData;
+window.addEventListener('DOMContentLoaded', loadData);
 </script>
 </body>
 </html>
