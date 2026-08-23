@@ -689,7 +689,7 @@ function N(num) {
 
 function pct(t, p) {
   if (!p || p === 0) {
-    return t > 0 ? '100%' : '0.00%';
+    return t > 0 ? 'N/A' : '0.00%';
   }
   return ((t / p) * 100).toFixed(2) + '%';
 }
@@ -1173,7 +1173,7 @@ function sortRows(rows,col,asc,buckets,periodDays){
   }
 
   const getSuggVal = r => {
-    if (!r.t || r.t === 0 || !r.p || r.p === 0) return 'No buffer required';
+    if (!r.t || r.t === 0) return 'No buffer required';
     const avgPickup = ((r.a || 0) + (r.e || 0) + (r.ar || 0)) / (periodDays || 1);
     const avgDispatch = (r.d || 0) / (periodDays || 1);
     return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
@@ -1305,7 +1305,7 @@ function renderSec(sec){
   };
 
   const getSuggText = d => {
-    if (!d.t || d.t === 0 || !d.p || d.p === 0) {
+    if (!d.t || d.t === 0) {
       return 'No buffer required';
     }
     const avgPickup = ((d.a || 0) + (d.e || 0) + (d.ar || 0)) / periodDays;
