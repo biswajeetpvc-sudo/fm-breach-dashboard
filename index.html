@@ -1339,13 +1339,26 @@ const hubRows = filterByDrr(
     return html;
   };
 
+  // const getSuggText = d => {
+  //   if (!d.t || d.t === 0) {
+  //     return 'No buffer required';
+  //   }
+  //   const avgPickup = ((d.a || 0) + (d.e || 0) + (d.ar || 0)) / periodDays;
+  //   const avgDispatch = (d.d || 0) / periodDays;
+  //   return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
+
   const getSuggText = d => {
-    if (!d.t || d.t === 0) {
-      return 'No buffer required';
-    }
-    const avgPickup = ((d.a || 0) + (d.e || 0) + (d.ar || 0)) / periodDays;
-    const avgDispatch = (d.d || 0) / periodDays;
-    return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
+  if (!d.t || d.t === 0) {
+    return 'No buffer required';
+  }
+  // Calculate ratio of Dispatch Breach to Daily Total
+  const ratio = (d.d || 0) / (d.t || 1);
+
+  // If Dispatch Breach / Daily Total > 75%, take 4 hrs buffer
+  if (ratio > 0.75) {
+    return 'Take 4 hrs buffer';
+  }
+  return 'Take 24 hrs buffer';
   };
 
   const getSuggStyle = sugg => {
