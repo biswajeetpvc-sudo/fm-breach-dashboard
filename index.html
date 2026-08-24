@@ -535,7 +535,15 @@ td.r{
     <label>Functional</label>
     <select id="f-type" onchange="applyFilters()">
       <option value="all">Functional (All)</option>
-      <!-- <option value="cpd">CPD Breach only</option> -->
+    </select>
+  </div>
+
+  <div class="fg">
+    <label>DRR Volume</label>
+    <select id="f-drr" onchange="applyFilters()">
+      <option value="">All Volumes</option>
+      <option value="lt500">&lt; 500</option>
+      <option value="ge500">&ge; 500</option>
     </select>
   </div>
 
@@ -640,7 +648,7 @@ td.r{
         <div class="pt on" onclick="setP(2,1,this)">D-1</div>
         <div class="pt" onclick="setP(2,3,this)">L3D</div>
         <div class="pt" onclick="setP(2,5,this)">L5D</div>
-        <div class="pt" onclick="setP(2,7,this)">L5D</div>
+        <div class="pt" onclick="setP(2,7,this)">L7D</div>
         <div class="pt" onclick="setP(2,999,this)">Overall</div>
       </div>
     </div>
@@ -946,7 +954,7 @@ function pop(id,vals){
 }
 
 function resetFilters(){
-  ['f-zone','f-gm','f-rm','f-am','f-ph'].forEach(id => document.getElementById(id).value = '');
+  ['f-zone','f-gm','f-rm','f-am','f-ph','f-drr'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('f-type').value = 'all';
   selectedDates = new Set();
   buildDateList();
@@ -960,17 +968,25 @@ function filterDataset(sourceArray) {
   const am = fv('f-am');
   const ph = fv('f-ph');
   const type = fv('f-type');
+  const drr = fv('f-drr');
   const ad = activeDates();
 
-  return sourceArray.filter(r =>
-    ad.has(normalizeDateStr(r.date)) &&
-    (!zone || r.zone === zone) &&
-    (!gm || r.gm === gm) &&
-    (!rm || r.rm === rm) &&
-    (!am || r.am === am) &&
-    (!ph || r.ph === ph) &&
-    (type !== 'cpd' || r.cpd)
-  );
+  return sourceArray.filter(r => {
+    const pickedVol = Number(r.picked || 0);
+    let passDrr = true;
+    
+    if (drr === 'lt500') passDrr = pickedVol < 500;
+    else if (drr === 'ge500') passDrr = pickedVol >= 500;
+
+    return ad.has(normalizeDateStr(r.date)) &&
+      (!zone || r.zone === zone) &&
+      (!gm || r.gm === gm) &&
+      (!rm || r.rm === rm) &&
+      (!am || r.am === am) &&
+      (!ph || r.ph === ph) &&
+      (type !== 'cpd' || r.cpd) &&
+      passDrr;
+  });
 }
 
 function applyFilters(){
@@ -1013,6 +1029,7 @@ function computeHubPickups(datesSet, targetMap = PICKED_MAP) {
   const fRm = fv('f-rm');
   const fAm = fv('f-am');
   const fPh = fv('f-ph');
+  const fDrr = fv('f-drr');
 
   Object.keys(targetMap).forEach(key => {
     const [hubNorm, dateStr] = key.split('||');
@@ -1028,6 +1045,10 @@ function computeHubPickups(datesSet, targetMap = PICKED_MAP) {
     if (fPh && meta.ph !== fPh) return; 
 
     const val = targetMap[key];
+
+    if (fDrr === 'lt500' && val >= 500) return;
+    if (fDrr === 'ge500' && val < 500) return;
+
     hubDateMap[key] = val;
     hubTotals[hubNorm] = (hubTotals[hubNorm] || 0) + val;
     overallTotal += val;
@@ -1047,7 +1068,7 @@ function renderKPIs(){
   const cnt = (buckets, isCpd = false) => {
     const targetRows = isCpd ? cpdRows : mainRows;
     const sum = targetRows.filter(r => buckets.includes(r.bucket))
-                    .reduce((total, r) => total + (r.cnt || 0), 0);
+                     .reduce((total, r) => total + (r.cnt || 0), 0);
     return isAvg ? (sum / periodDays) : sum;
   };
 
@@ -1188,6 +1209,16 @@ function sortRows(rows,col,asc,buckets,periodDays){
   });
 }
 
+function doSort(sec, col) {
+  if (sortState[sec].col === col) {
+    sortState[sec].asc = !sortState[sec].asc;
+  } else {
+    sortState[sec].col = col;
+    sortState[sec].asc = true;
+  }
+  renderSec(sec);
+}
+
 function renderSec(sec){
   const isDispatchSec = (sec === 2);
   const buckets = sec === 0 ? ALL : sec === 1 ? PICKUP : [BD];
@@ -1279,158 +1310,171 @@ function renderSec(sec){
   const prefix = showAverage ? 'Avg ' : '';
   let numCI = 5;
 
-  let header = '<thead><tr>' + thC('Hub',0) + thC('Zone',1) + thC('GM',2) + thC('RM',3) + thC('AM',4) + thC(prefix + 'DRR', numCI++, 'r');
-  if(sA) header += thC(prefix + 'Attempt Breach', numCI++, 'r');
-  if(sE) header += thC(prefix + 'EKL Issue', numCI++, 'r');
-  if(sR) header += thC(prefix + 'Auto Reset', numCI++, 'r');
-  if(sD) header += thC(prefix + 'Dispatch Breach', numCI++, 'r');
-  header += thC(showAverage ? 'Avg Daily Total' : 'Grand Total', numCI++, 'r') + thC(prefix + 'Breach %', numCI++, 'r') + thC('Suggestion', numCI++) + '</tr></thead>';
+  let header = '<thead><tr>' +
+    thC('Hub', 0) +
+    thC('Zone', 1) +
+    thC('GM', 2) +
+    thC('RM', 3) +
+    thC('AM', 4) +
+    thC(prefix + 'DRR', ++numCI, 'r');
 
-  const zbadge = z => '<span class="zbadge z-' + (z || 'Unknown') + '">' + (z || '?') + '</span>';
+  if(sA) header += thC(prefix + 'Attempt', ++numCI, 'r');
+  if(sE) header += thC(prefix + 'EKL Issue', ++numCI, 'r');
+  if(sR) header += thC(prefix + 'Auto Reset', ++numCI, 'r');
+  if(sD) header += thC(prefix + 'Dispatch Breach', ++numCI, 'r');
 
-  const formatValue = value => {
-    if(showAverage) return ((value || 0) / periodDays).toLocaleString(undefined, { minimumFractionDigits:1, maximumFractionDigits:1 });
-    return N(value);
-  };
+  header += thC(prefix + 'Total Breach', ++numCI, 'r') +
+            thC('Breach %', ++numCI, 'r');
 
-  const cells = d => {
-    let html = '<td class="r" style="color:var(--teal);font-weight:700">' + formatValue(d.p) + '</td>';
-    if(sA) html += '<td class="r">' + formatValue(d.a) + '</td>';
-    if(sE) html += '<td class="r">' + formatValue(d.e) + '</td>';
-    if(sR) html += '<td class="r">' + formatValue(d.ar) + '</td>';
-    if(sD) html += '<td class="r">' + formatValue(d.d) + '</td>';
-    html += '<td class="r" style="color:var(--blue);font-weight:700">' + formatValue(d.t) + '</td>';
-    html += '<td class="r">' + pct(d.t, d.p) + '</td>';
-    return html;
-  };
+  if (sec === 0) header += thC('Actionable Suggestion', ++numCI);
 
-  const getSuggText = d => {
-    if (!d.t || d.t === 0) {
-      return 'No buffer required';
-    }
-    const avgPickup = ((d.a || 0) + (d.e || 0) + (d.ar || 0)) / periodDays;
-    const avgDispatch = (d.d || 0) / periodDays;
-    return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
-  };
-
-  const getSuggStyle = sugg => {
-    if (sugg === 'No buffer required') return 'color:var(--green)';
-    if (sugg.includes('24')) return 'color:var(--amber)';
-    return 'color:var(--blue)';
-  };
+  header += '</tr></thead>';
 
   let body = '<tbody>';
 
+  const formatVal = val => showAverage 
+    ? (val / periodDays).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    : N(val);
+
   hubRows.forEach((r, idx) => {
-    const rowId = 'sub-' + sec + '-' + idx;
-    const sugg = getSuggText(r);
+    const zCls = 'zbadge z-' + (r.zone || 'Unknown');
+    const rowId = `sec${sec}_row${idx}`;
 
-    body += '<tr>' +
-      '<td><span class="expand-btn" onclick="toggleRow(\'' + rowId + '\', this)">+</span> ' + r.ph + '</td>' +
-      '<td>' + zbadge(r.zone) + '</td>' +
-      '<td>' + (r.gm || '-') + '</td>' +
-      '<td>' + (r.rm || '-') + '</td>' +
-      '<td>' + (r.am || '-') + '</td>' +
-      cells(r) +
-      '<td style="font-weight:600;' + getSuggStyle(sugg) + '">' + sugg + '</td>' +
-      '</tr>';
+    let rowStr = '<tr>' +
+      '<td>' +
+        '<span class="expand-btn" onclick="toggleRow(\'' + rowId + '\')">+</span>' +
+        r.ph +
+      '</td>' +
+      '<td><span class="' + zCls + '">' + (r.zone || 'N/A') + '</span></td>' +
+      '<td>' + (r.gm || 'N/A') + '</td>' +
+      '<td>' + (r.rm || 'N/A') + '</td>' +
+      '<td>' + (r.am || 'N/A') + '</td>' +
+      '<td class="r">' + formatVal(r.p) + '</td>';
 
-    const breachOnlyDates = Object.keys(r.byDate)
-      .filter(dk => (r.byDate[dk].t || 0) > 0)
-      .sort((a,b) => dv(b) - dv(a));
+    if(sA) rowStr += '<td class="r">' + formatVal(r.a) + '</td>';
+    if(sE) rowStr += '<td class="r">' + formatVal(r.e) + '</td>';
+    if(sR) rowStr += '<td class="r">' + formatVal(r.ar) + '</td>';
+    if(sD) rowStr += '<td class="r">' + formatVal(r.d) + '</td>';
 
-    let subHtml = '<tr id="' + rowId + '" style="display:none;"><td colspan="13">' +
-      '<div class="sub-table-container"><strong>Breach Days Breakdown for ' + r.ph + '</strong>';
+    rowStr += '<td class="r">' + formatVal(r.t) + '</td>' +
+              '<td class="r">' + pct(r.t, r.p) + '</td>';
 
-    if (breachOnlyDates.length === 0) {
-      subHtml += '<div style="padding:8px 0; color:var(--green); font-weight:600;">✓ No breaches recorded for this hub in the selected period.</div>';
-    } else {
-      subHtml += '<table class="sub-table"><thead><tr><th>Breach Date</th><th class="r">Picked</th>';
-      
-      if(sA) subHtml += '<th class="r">Attempt</th>';
-      if(sE) subHtml += '<th class="r">EKL</th>';
-      if(sR) subHtml += '<th class="r">Auto Reset</th>';
-      if(sD) subHtml += '<th class="r">Dispatch</th>';
-      subHtml += '<th class="r">Total Breaches</th><th class="r">Breach %</th></tr></thead><tbody>';
-
-      breachOnlyDates.forEach(dk => {
-        const dd = r.byDate[dk];
-        subHtml += '<tr>' +
-          '<td>' + dk + '</td>' +
-          '<td class="r">' + N(dd.p) + '</td>';
-        if(sA) subHtml += '<td class="r">' + N(dd.a) + '</td>';
-        if(sE) subHtml += '<td class="r">' + N(dd.e) + '</td>';
-        if(sR) subHtml += '<td class="r">' + N(dd.ar) + '</td>';
-        if(sD) subHtml += '<td class="r">' + N(dd.d) + '</td>';
-        subHtml += '<td class="r" style="font-weight:700; color:var(--red);">' + N(dd.t) + '</td>' +
-          '<td class="r">' + pct(dd.t, dd.p) + '</td>' +
-          '</tr>';
-      });
-
-      subHtml += '</tbody></table>';
+    if (sec === 0) {
+      if (!r.t || r.t === 0) {
+        rowStr += '<td><span style="color:var(--muted)">No buffer required</span></td>';
+      } else {
+        const avgPickup = (r.a + r.e + r.ar) / periodDays;
+        const avgDispatch = r.d / periodDays;
+        if (avgPickup >= avgDispatch) {
+          rowStr += '<td><span style="color:var(--red);font-weight:700">Take 24 hrs buffer</span></td>';
+        } else {
+          rowStr += '<td><span style="color:var(--amber);font-weight:700">Take 4 hrs buffer</span></td>';
+        }
+      }
     }
 
-    subHtml += '</div></td></tr>';
-    body += subHtml;
+    rowStr += '</tr>';
+
+    rowStr += `<tr id="${rowId}" style="display:none;"><td colspan="15">` +
+      buildSubTable(r, buckets, periodDays, showAverage) +
+      `</td></tr>`;
+
+    body += rowStr;
   });
 
-  const gtSugg = getSuggText(gt);
-  body += '<tr class="rt">' +
-    '<td colspan="5">GRAND TOTAL</td>' +
-    cells(gt) +
-    '<td style="font-weight:700;' + getSuggStyle(gtSugg) + '">' + gtSugg + '</td>' +
-    '</tr></tbody>';
+  let totalStr = '<tr class="rt">' +
+    '<td colspan="5">Total (' + hubRows.length + ' Hubs)</td>' +
+    '<td class="r">' + formatVal(gt.p) + '</td>';
 
+  if(sA) totalStr += '<td class="r">' + formatVal(gt.a) + '</td>';
+  if(sE) totalStr += '<td class="r">' + formatVal(gt.e) + '</td>';
+  if(sR) totalStr += '<td class="r">' + formatVal(gt.ar) + '</td>';
+  if(sD) totalStr += '<td class="r">' + formatVal(gt.d) + '</td>';
+
+  totalStr += '<td class="r">' + formatVal(gt.t) + '</td>' +
+               '<td class="r">' + pct(gt.t, gt.p) + '</td>';
+
+  if (sec === 0) totalStr += '<td>-</td>';
+
+  totalStr += '</tr>';
+
+  body += totalStr + '</tbody>';
   tbl.innerHTML = header + body;
 }
 
-function toggleRow(rowId, btn) {
-  const targetRow = document.getElementById(rowId);
-  if (targetRow.style.display === 'none') {
-    targetRow.style.display = 'table-row';
-    btn.textContent = '-';
-  } else {
-    targetRow.style.display = 'none';
-    btn.textContent = '+';
-  }
+function toggleRow(rowId) {
+  const el = document.getElementById(rowId);
+  if (!el) return;
+  const isHidden = el.style.display === 'none';
+  el.style.display = isHidden ? 'table-row' : 'none';
+  const btn = el.previousElementSibling.querySelector('.expand-btn');
+  if (btn) btn.textContent = isHidden ? '−' : '+';
 }
 
-function doSort(sec, col) {
-  if (sortState[sec].col === col) {
-    sortState[sec].asc = !sortState[sec].asc;
-  } else {
-    sortState[sec].col = col;
-    sortState[sec].asc = true;
-  }
-  renderSec(sec);
+function buildSubTable(hubObj, buckets, periodDays, showAverage) {
+  const sA = buckets.includes(BA);
+  const sE = buckets.includes(BE);
+  const sR = buckets.includes(BR);
+  const sD = buckets.includes(BD);
+
+  const datesSorted = Object.keys(hubObj.byDate).sort((a,b) => dv(b) - dv(a));
+
+  let html = '<div class="sub-table-container"><strong>Datewise Breakdown for ' + hubObj.ph + '</strong>';
+  html += '<table class="sub-table"><thead><tr><th>Date</th><th class="r">DRR</th>';
+
+  if(sA) html += '<th class="r">Attempt</th>';
+  if(sE) html += '<th class="r">EKL</th>';
+  if(sR) html += '<th class="r">Auto Reset</th>';
+  if(sD) html += '<th class="r">Dispatch</th>';
+
+  html += '<th class="r">Total</th><th class="r">Breach %</th></tr></thead><tbody>';
+
+  datesSorted.forEach(dStr => {
+    const dData = hubObj.byDate[dStr];
+    html += '<tr>' +
+      '<td>' + dStr + '</td>' +
+      '<td class="r">' + N(dData.p) + '</td>';
+
+    if(sA) html += '<td class="r">' + N(dData.a) + '</td>';
+    if(sE) html += '<td class="r">' + N(dData.e) + '</td>';
+    if(sR) html += '<td class="r">' + N(dData.ar) + '</td>';
+    if(sD) html += '<td class="r">' + N(dData.d) + '</td>';
+
+    html += '<td class="r">' + N(dData.t) + '</td>' +
+            '<td class="r">' + pct(dData.t, dData.p) + '</td>' +
+            '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  return html;
 }
 
 function downloadRaw() {
-  const dataToExport = filtered.concat(cpdFiltered);
-  if (!dataToExport.length) {
-    alert("No data available to download.");
+  if (!filtered.length && !cpdFiltered.length) {
+    alert("No data available to export.");
     return;
   }
-  const headers = Object.keys(dataToExport[0]);
-  const csvRows = [headers.join(',')];
 
-  dataToExport.forEach(row => {
-    const values = headers.map(header => {
-      const val = row[header] === undefined || row[header] === null ? '' : row[header];
-      return '"' + String(val).replace(/"/g, '""') + '"';
-    });
-    csvRows.push(values.join(','));
-  });
+  const exportData = filtered.concat(cpdFiltered).map(r => ({
+    Date: r.date,
+    Zone: r.zone,
+    GM: r.gm,
+    RM: r.rm,
+    AM: r.am,
+    Hub: r.ph,
+    Bucket: r.bucket,
+    Count: r.cnt || 1,
+    "DRR (Picked)": r.picked || 0
+  }));
 
-  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.setAttribute('href', url);
-  a.setAttribute('download', 'breach_filtered_export.csv');
-  a.click();
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Breach_Data");
+  XLSX.writeFile(wb, "FM_Breach_Export.xlsx");
 }
 
-window.addEventListener('DOMContentLoaded', loadData);
+window.onload = loadData;
 </script>
+
 </body>
 </html>
