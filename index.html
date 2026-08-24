@@ -539,6 +539,13 @@ td.r{
     </select>
   </div>
 
+  <div class="ptabs" id="tp-drr">
+  <div class="pt on" onclick="setDrrMode('all',this)">All DRR</div>
+  <div class="pt" onclick="setDrrMode('lt500',this)">&lt; 500 DRR</div>
+  <div class="pt" onclick="setDrrMode('gte500',this)">≥ 500 DRR</div>
+</div>
+
+
   <button class="btn-reset" onclick="resetFilters()">Reset</button>
 
 </div>
@@ -660,6 +667,7 @@ const BD = 'Dispatch breach';
 const ALL = [BA,BE,BR,BD];
 const PICKUP = [BA,BE,BR];
 
+let drrMode = 'all';
 let RAW = [];
 let CPD_RAW = [];
 let PICKED_MAP = {}; 
@@ -687,11 +695,35 @@ function N(num) {
   return (num || 0).toLocaleString();
 }
 
-function pct(t, p) {
-  if (!p || p === 0) {
-    return t > 0 ? '100.00%' : '0.00%';
-  }
-  return ((t / p) * 100).toFixed(2) + '%';
+// function pct(t, p) {
+//   if (!p || p === 0) {
+//     return t > 0 ? '100.00%' : '0.00%';
+//   }
+//   return ((t / p) * 100).toFixed(2) + '%';
+// }
+
+
+  function setDrrMode(mode, el){
+  drrMode = mode;
+  document.getElementById('tp-drr').querySelectorAll('.pt').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+  applyFilters(); // re-run filters and rendering
+}
+
+  function filterByDrr(rows){
+  if(drrMode === 'all') return rows;
+  if(drrMode === 'lt500') return rows.filter(r => (r.p || 0) < 500);
+  if(drrMode === 'gte500') return rows.filter(r => (r.p || 0) >= 500);
+  return rows;
+}
+
+  
+
+  function pct(d) {
+  const numerator = (d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0);
+  const denominator = (d.p || 0) + numerator;
+  if (denominator === 0) return '0.00%';
+  return ((numerator / denominator) * 100).toFixed(2) + '%';
 }
 
 function setS(type, msg) {
@@ -1258,8 +1290,10 @@ function renderSec(sec){
   });
 
   const ss = sortState[sec];
-  const hubRows = sortRows(Object.values(agg), ss.col, ss.asc, buckets, periodDays);
-
+const hubRows = filterByDrr(
+  sortRows(Object.values(agg), ss.col, ss.asc, buckets, periodDays)
+);
+  
   const gt = { p:0, a:0, e:0, ar:0, d:0, t:0 };
   hubRows.forEach(r => { gt.p += r.p; gt.a += r.a; gt.e += r.e; gt.ar += r.ar; gt.d += r.d; gt.t += r.t; });
 
@@ -1300,7 +1334,8 @@ function renderSec(sec){
     if(sR) html += '<td class="r">' + formatValue(d.ar) + '</td>';
     if(sD) html += '<td class="r">' + formatValue(d.d) + '</td>';
     html += '<td class="r" style="color:var(--blue);font-weight:700">' + formatValue(d.t) + '</td>';
-    html += '<td class="r">' + pct(d.t, d.p) + '</td>';
+    // html += '<td class="r">' + pct(d.t, d.p) + '</td>';
+    html += '<td class="r">' + pct(d) + '</td>';
     return html;
   };
 
