@@ -896,9 +896,14 @@ function buildFilters(){
   buildDateList();
 }
 
+// ─────────────────────────────────────────────
+// DATE FILTER
+// ─────────────────────────────────────────────
+
 function buildDateList(){
   const list = document.getElementById('date-list');
   list.innerHTML = '';
+
   const active = activeDates();
 
   DATES.forEach(d => {
@@ -908,17 +913,57 @@ function buildDateList(){
     const chk = document.createElement('input');
     chk.type = 'checkbox';
     chk.value = d;
-    chk.checked = selectedDates.size === 0 || active.has(d);
+
+    // Show checkbox according to currently active dates
+    chk.checked = active.has(d);
 
     chk.onchange = () => {
-      if(selectedDates.size === 0) selectedDates = new Set(DATES);
-      if(chk.checked) selectedDates.add(d);
-      else selectedDates.delete(d);
-      
-      if(selectedDates.size === DATES.length) selectedDates = new Set();
-      
+
+      // ─────────────────────────────────────
+      // CASE 1: Current state = NONE
+      // Remove __none__ before selecting a date
+      // ─────────────────────────────────────
+      if(selectedDates.has('__none__')){
+        selectedDates = new Set();
+      }
+
+      // ─────────────────────────────────────
+      // CASE 2: Current state = ALL DATES
+      // Convert implicit "all" into explicit
+      // selection before changing one checkbox
+      // ─────────────────────────────────────
+      else if(selectedDates.size === 0){
+        selectedDates = new Set(DATES);
+      }
+
+      // Add or remove clicked date
+      if(chk.checked){
+        selectedDates.add(d);
+      } else {
+        selectedDates.delete(d);
+      }
+
+      // ─────────────────────────────────────
+      // If every date is selected,
+      // represent it as "All Dates"
+      // ─────────────────────────────────────
+      if(selectedDates.size === DATES.length){
+        selectedDates = new Set();
+      }
+
+      // ─────────────────────────────────────
+      // If no date remains selected,
+      // represent it as "None selected"
+      // ─────────────────────────────────────
+      if(selectedDates.size === 0){
+        selectedDates = new Set(['__none__']);
+      }
+
       updateDateBtnLabel();
       applyFilters();
+
+      // Refresh checkbox UI
+      refreshDateCheckboxes();
     };
 
     item.appendChild(chk);
@@ -929,42 +974,183 @@ function buildDateList(){
   updateDateBtnLabel();
 }
 
+
+// Refresh only checkbox states
+function refreshDateCheckboxes(){
+
+  const active = activeDates();
+
+  document
+    .querySelectorAll('#date-list input[type="checkbox"]')
+    .forEach(chk => {
+      chk.checked = active.has(chk.value);
+    });
+}
+
+
+// Select All
 function selectAllDates(){
+
+  // Empty set represents ALL dates
   selectedDates = new Set();
+
   buildDateList();
   applyFilters();
 }
 
+
+// Select None
 function clearAllDates(){
+
+  // Special marker represents NO dates
   selectedDates = new Set(['__none__']);
+
   buildDateList();
   applyFilters();
 }
 
+
+// Update date button text
 function updateDateBtnLabel(){
+
   const lbl = document.getElementById('date-btn-label');
-  if(selectedDates.size === 0) lbl.textContent = 'All Dates';
-  else if(selectedDates.has('__none__')) lbl.textContent = 'None selected';
-  else if(selectedDates.size === 1) lbl.textContent = [...selectedDates][0];
-  else lbl.textContent = selectedDates.size + ' dates selected';
+
+  // Empty set = All Dates
+  if(selectedDates.size === 0){
+    lbl.textContent = 'All Dates';
+    return;
+  }
+
+  // Special None state
+  if(selectedDates.has('__none__')){
+    lbl.textContent = 'None selected';
+    return;
+  }
+
+  // One selected date
+  if(selectedDates.size === 1){
+    lbl.textContent = [...selectedDates][0];
+    return;
+  }
+
+  // Multiple selected dates
+  lbl.textContent = selectedDates.size + ' dates selected';
 }
 
+
+// Open / close date dropdown
 function toggleDateDD(e){
+
   e.stopPropagation();
-  document.getElementById('date-dd').classList.toggle('open');
+
+  document
+    .getElementById('date-dd')
+    .classList
+    .toggle('open');
 }
 
+
+// Close dropdown when clicking outside
 document.addEventListener('click', e => {
-  if(!document.getElementById('date-fg').contains(e.target)){
-    document.getElementById('date-dd').classList.remove('open');
+
+  const dateFg = document.getElementById('date-fg');
+
+  if(dateFg && !dateFg.contains(e.target)){
+    document
+      .getElementById('date-dd')
+      .classList
+      .remove('open');
   }
 });
 
+
+// Return the actual active dates
 function activeDates(){
-  if(selectedDates.size === 0) return new Set(DATES);
-  if(selectedDates.has('__none__')) return new Set();
-  return selectedDates;
+
+  // Empty set means ALL dates
+  if(selectedDates.size === 0){
+    return new Set(DATES);
+  }
+
+  // __none__ means no dates
+  if(selectedDates.has('__none__')){
+    return new Set();
+  }
+
+  // Otherwise return selected dates
+  return new Set(selectedDates);
 }
+  
+
+// function buildDateList(){
+//   const list = document.getElementById('date-list');
+//   list.innerHTML = '';
+//   const active = activeDates();
+
+//   DATES.forEach(d => {
+//     const item = document.createElement('label');
+//     item.className = 'date-item';
+
+//     const chk = document.createElement('input');
+//     chk.type = 'checkbox';
+//     chk.value = d;
+//     chk.checked = selectedDates.size === 0 || active.has(d);
+
+//     chk.onchange = () => {
+//       if(selectedDates.size === 0) selectedDates = new Set(DATES);
+//       if(chk.checked) selectedDates.add(d);
+//       else selectedDates.delete(d);
+      
+//       if(selectedDates.size === DATES.length) selectedDates = new Set();
+      
+//       updateDateBtnLabel();
+//       applyFilters();
+//     };
+
+//     item.appendChild(chk);
+//     item.appendChild(document.createTextNode(d));
+//     list.appendChild(item);
+//   });
+
+//   updateDateBtnLabel();
+// }
+
+// function selectAllDates(){
+//   selectedDates = new Set();
+//   buildDateList();
+//   applyFilters();
+// }
+
+// function clearAllDates(){
+//   selectedDates = new Set(['__none__']);
+//   buildDateList();
+//   applyFilters();
+// }
+
+// function updateDateBtnLabel(){
+//   const lbl = document.getElementById('date-btn-label');
+//   if(selectedDates.size === 0) lbl.textContent = 'All Dates';
+//   else if(selectedDates.has('__none__')) lbl.textContent = 'None selected';
+//   else if(selectedDates.size === 1) lbl.textContent = [...selectedDates][0];
+//   else lbl.textContent = selectedDates.size + ' dates selected';
+// }
+
+// function toggleDateDD(e){
+//   e.stopPropagation();
+//   document.getElementById('date-dd').classList.toggle('open');
+// }
+
+// document.addEventListener('click', e => {
+//   if(!document.getElementById('date-fg').contains(e.target)){
+//     document.getElementById('date-dd').classList.remove('open');
+//   }
+// });
+
+// function activeDates(){
+//   if(selectedDates.size === 0) return new Set(DATES);
+//   if(selectedDates.has('__none__')) return new Set();
+//   return selectedDates;
+// }
 
 function pop(id,vals){
   const el = document.getElementById(id);
