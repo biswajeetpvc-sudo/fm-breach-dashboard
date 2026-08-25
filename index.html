@@ -532,12 +532,13 @@ td.r{
   </div>
 
   <div class="fg">
-    <label>Functional</label>
-    <select id="f-type" onchange="applyFilters()">
-      <option value="all">Functional (All)</option>
-      <!-- <option value="cpd">CPD Breach only</option> -->
-    </select>
-  </div>
+  <label>Functional / CPD</label>
+
+  <select id="f-type" onchange="handleFunctionalChange()">
+    <option value="all">Functional Breach</option>
+    <option value="cpd">CPD Breach</option>
+  </select>
+</div>
 
   <div class="ptabs" id="tp-drr">
   <div class="pt on" onclick="setDrrMode('all',this)">All DRR</div>
@@ -702,6 +703,18 @@ function N(num) {
 //   return ((t / p) * 100).toFixed(2) + '%';
 // }
 
+
+  function handleFunctionalChange(){
+
+  const selectedValue = document.getElementById('f-type').value;
+
+  if(selectedValue === 'cpd'){
+    window.location.href = 'https://biswajeetpvc-sudo.github.io/fm-cpd-breach-dashboard/';
+    return;
+  }
+
+  applyFilters();
+}
 
   function setDrrMode(mode, el){
   drrMode = mode;
