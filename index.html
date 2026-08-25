@@ -709,6 +709,54 @@ function N(num) {
   el.classList.add('on');
   applyFilters(); // re-run filters and rendering
 }
+///////////////////////////////////////////////////////
+  function getUniqueDates(data) {
+  const set = new Set();
+  data.forEach(r => {
+    if (r.date) set.add(r.date);
+  });
+  return Array.from(set).sort(); // sorted list
+}
+
+  function renderDateList(data) {
+  const dates = getUniqueDates(data);
+  const list = document.getElementById('date-list');
+  list.innerHTML = '';
+  dates.forEach(date => {
+    const div = document.createElement('div');
+    div.innerHTML = `
+      <label>
+        <input type="checkbox" class="date-option" value="${date}" checked>
+        ${date}
+      </label>
+    `;
+    list.appendChild(div);
+  });
+  updateDateLabel(); // initialize label
+}
+
+  function selectAllDates() {
+  document.querySelectorAll('.date-option').forEach(cb => cb.checked = true);
+  updateDateLabel();
+}
+
+function clearAllDates() {
+  document.querySelectorAll('.date-option').forEach(cb => cb.checked = false);
+  updateDateLabel();
+}
+
+  function updateDateLabel() {
+  const selected = Array.from(document.querySelectorAll('.date-option:checked')).map(cb => cb.value);
+  document.getElementById('date-btn-label').textContent = selected.length ? selected.join(', ') : 'None';
+}
+
+document.addEventListener('change', e => {
+  if (e.target.classList.contains('date-option')) {
+    updateDateLabel();
+    applyFilters(); // re-run dashboard filters when dates change
+  }
+});
+
 
   function filterByDrr(rows){
   if(drrMode === 'all') return rows;
@@ -1014,6 +1062,19 @@ function applyFilters(){
   renderAll();
 }
 
+function getSelectedDates() {
+  return Array.from(document.querySelectorAll('.date-option:checked')).map(cb => cb.value);
+}
+
+function applyFilters() {
+  const selectedDates = new Set(getSelectedDates());
+  const filtered = rawData.filter(r => selectedDates.has(r.date));
+  // continue with your existing filtering logic (DRR, hubs, KPIs, etc.)
+  renderSec(filtered);
+}
+
+
+  
 function datesForN(n){
   const available = DATES.filter(d => activeDates().has(d));
   if(n === 999) return new Set(available);
