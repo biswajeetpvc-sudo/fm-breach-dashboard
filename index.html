@@ -726,52 +726,6 @@ function N(num) {
   return ((numerator / denominator) * 100).toFixed(2) + '%';
 }
 
-  ///////////////////////////////
-
-  function getUniqueDates(rows) {
-  const set = new Set();
-  rows.forEach(r => {
-    if (r.date) set.add(r.date);
-  });
-  return Array.from(set).sort();
-}
-
-function renderDateList(rows) {
-  const dates = getUniqueDates(rows);
-  const list = document.getElementById('date-list');
-  list.innerHTML = '';
-  dates.forEach(date => {
-    const div = document.createElement('div');
-    div.innerHTML = `
-      <label>
-        <input type="checkbox" class="date-option" value="${date}" checked>
-        ${date}
-      </label>
-    `;
-    list.appendChild(div);
-  });
-  updateDateLabel();
-}
-
-function updateDateLabel() {
-  const selected = Array.from(document.querySelectorAll('.date-option:checked')).map(cb => cb.value);
-  document.getElementById('date-btn-label').textContent = selected.length ? selected.join(', ') : 'None';
-}
-
-function selectAllDates() {
-  document.querySelectorAll('.date-option').forEach(cb => cb.checked = true);
-  updateDateLabel();
-  applyFilters();
-}
-
-function clearAllDates() {
-  document.querySelectorAll('.date-option').forEach(cb => cb.checked = false);
-  updateDateLabel();
-  applyFilters();
-}
-
-/////////////////////////////////////////
-
 function setS(type, msg) {
   const sb = document.getElementById('sbar');
   if (type === 'err') {
@@ -1217,8 +1171,6 @@ function renderCharts(){
   });
 }
 
-  
-
 function setP(sec,days,el){
   periods[sec] = days;
   document.getElementById('tp' + sec).querySelectorAll('.pt').forEach(t => t.classList.remove('on'));
@@ -1341,9 +1293,6 @@ function renderSec(sec){
 const hubRows = filterByDrr(
   sortRows(Object.values(agg), ss.col, ss.asc, buckets, periodDays)
 );
-
-renderDateList(Object.values(agg));
-
   
   const gt = { p:0, a:0, e:0, ar:0, d:0, t:0 };
   hubRows.forEach(r => { gt.p += r.p; gt.a += r.a; gt.e += r.e; gt.ar += r.ar; gt.d += r.d; gt.t += r.t; });
