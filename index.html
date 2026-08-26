@@ -1546,19 +1546,42 @@ const hubRows = filterByDrr(
   //   const avgDispatch = (d.d || 0) / periodDays;
   //   return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
 
-  const getSuggText = d => {
-  if (!d.t || d.t === 0) {
-    return 'No buffer required';
-  }
-  // Calculate ratio of Dispatch Breach to Daily Total
-  const ratio = (d.d || 0) / (d.t || 1);
+  // const getSuggText = d => {
+  // if (!d.t || d.t === 0) {
+  //   return 'No buffer required';
+  // }
+  // // Calculate ratio of Dispatch Breach to Daily Total
+  // const ratio = (d.d || 0) / (d.t || 1);
 
-  // If Dispatch Breach / Daily Total > 75%, take 4 hrs buffer
-  if (ratio > 0.75) {
-    return 'Take 4 hrs buffer';
-  }
-  return 'Take 24 hrs buffer';
+  // // If Dispatch Breach / Daily Total > 75%, take 4 hrs buffer
+  // if (ratio > 0.75) {
+  //   return 'Take 4 hrs buffer';
+  // }
+  // return 'Take 24 hrs buffer';
+  // };
+
+
+      const getSuggText = d => {
+    // Condition 1: total breaches missing or ≤ 400
+    // Condition 2: breach % ≤ 2%
+    const breachPct = ((d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0)) / ((d.p || 0) + (d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0)) * 100;
+  
+    if (!d.t || d.t <= 400 || breachPct <= 2) {
+      return 'No buffer required';
+    }
+  
+    // Calculate ratio of Dispatch Breach to Daily Total
+    const ratio = (d.d || 0) / (d.t || 1);
+  
+    // If Dispatch Breach / Daily Total > 75% → 4 hrs buffer
+    if (ratio > 0.75) {
+      return 'Take 4 hrs buffer';
+    }
+  
+    // Otherwise → 24 hrs buffer
+    return 'Take 24 hrs buffer';
   };
+
 
   const getSuggStyle = sugg => {
     if (sugg === 'No buffer required') return 'color:var(--green)';
