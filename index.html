@@ -674,6 +674,11 @@ let CPD_RAW = [];
 let PICKED_MAP = {}; 
 let CPD_PICKED_MAP = {}; 
 let HUB_MAP = {}; 
+
+// Hub Capacity data loaded from data.json -> hub_capacity
+let HUB_CAPACITY = [];
+let CAPACITY_MAP = {};
+
 let DATES = [];
 let filtered = [];
 let cpdFiltered = [];
@@ -709,7 +714,7 @@ function N(num) {
   const selectedValue = document.getElementById('f-type').value;
 
   if(selectedValue === 'cpd'){
-    window.location.href = 'https://biswajeetpvc-sudo.github.io/fm-cpd-breach-dashboard/';
+    window.location.href = 'https://url.uk.m.mimecastprotect.com/s/kY_rCNERVt6N3v6jumf2OhyerKU?domain=biswajeetpvc-sudo.github.io';
     return;
   }
 
@@ -750,15 +755,132 @@ function setS(type, msg) {
 
 function normalizeDateStr(d) {
   if (!d) return '';
-  let s = String(d).trim().replace(/\//g, '-');
-  if (/^\d{8}$/.test(s)) {
-    return `${s.substring(6,8)}-${s.substring(4,6)}-${s.substring(0,4)}`;
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const [y, m, day] = s.split('-');
-    return `${day}-${m}-${y}`;
-  }
+  let s = String(d).trim().replace(/\//g, '-').replace(/\s+/g, '');
+  if (/^\d{8}$/.test(s)) return `${s.substring(6,8)}-${s.substring(4,6)}-${s.substring(0,4)}`;
+  if (/^\d{2}-\d{6}$/.test(s)) return `${s.substring(0,2)}-${s.substring(3,5)}-${s.substring(5,9)}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) { const [y,m,day]=s.split('-'); return `${day}-${m}-${y}`; }
+  const m=s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if(m) return `${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}-${m[3]}`;
   return s;
+}
+
+function normalizeHubKey(hub){
+  return String(hub || '').trim().toLowerCase().replace(/[^a-z0-9]/g,'');
+}
+
+
+// ─────────────────────────────────────────────
+// HUB CAPACITY DATA
+// Reads payload.hub_capacity from data.json
+// Expected columns: Hub | Date | Capacity | Consumption
+// ─────────────────────────────────────────────
+function processHubCapacity(payload){
+  HUB_CAPACITY = [];
+  CAPACITY_MAP = {};
+
+  if(!payload || typeof payload !== 'object') return;
+
+  const capacityRows = payload.hub_capacity || payload.Hub_Capacity || [];
+
+  if(!Array.isArray(capacityRows)) return;
+
+  capacityRows.forEach(row => {
+    const hub = String(
+      row.hub || row.Hub || row.ph || row.ph_name || ''
+    ).trim();
+
+    const date = normalizeDateStr(row.date || row.Date || '');
+
+    if(!hub || !date) return;
+
+    const hubNorm = normalizeHubKey(hub);
+    const capacity = Number(row.capacity ?? row.Capacity ?? 0) || 0;
+    const consumption = Number(row.consumption ?? row.Consumption ?? 0) || 0;
+
+    const record = {
+      hub,
+      hubNorm,
+      date,
+      capacity,
+      consumption
+    };
+
+    HUB_CAPACITY.push(record);
+    CAPACITY_MAP[hubNorm + '||' + date] = record;
+  });
+
+  console.log('Hub capacity loaded:', HUB_CAPACITY.length, 'records');
+}
+
+// Add/subtract days from a DD-MM-YYYY date
+function addDaysToDate(dateStr, days){
+  const normalized = normalizeDateStr(dateStr);
+  if(!normalized) return '';
+
+  const parts = normalized.split('-');
+  if(parts.length !== 3) return '';
+
+  const date = new Date(
+    Number(parts[2]),
+    Number(parts[1]) - 1,
+    Number(parts[0])
+  );
+
+  if(isNaN(date.getTime())) return '';
+
+  date.setDate(date.getDate() + days);
+
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = date.getFullYear();
+
+  return dd + '-' + mm + '-' + yyyy;
+}
+
+// Latest breach data is D-1.
+// Therefore the next two dates are Today and Tomorrow for capacity checking.
+function getCapacityDates(){
+  const breachDates = [...new Set(RAW.map(r => r.date))]
+    .filter(Boolean)
+    .sort((a,b) => dv(b) - dv(a));
+
+  const latestBreachDate = breachDates[0] || '';
+
+  return {
+    latestBreachDate,
+    today: latestBreachDate ? addDaysToDate(latestBreachDate, 1) : '',
+    tomorrow: latestBreachDate ? addDaysToDate(latestBreachDate, 2) : ''
+  };
+}
+
+function isCapacityFullyConsumed(hub, date){
+  const hubNorm = normalizeHubKey(hub);
+  const normalizedDate = normalizeDateStr(date);
+  const record = CAPACITY_MAP[hubNorm + '||' + normalizedDate];
+
+  // Missing capacity data means this date is not treated as fully consumed.
+  if(!record) return false;
+
+  const capacity = Number(record.capacity) || 0;
+  const consumption = Number(record.consumption) || 0;
+
+  if(capacity <= 0) return false;
+
+  return consumption >= capacity;
+}
+
+function getHubCapacityStatus(hub){
+  const dates = getCapacityDates();
+
+  const todayFull = isCapacityFullyConsumed(hub, dates.today);
+  const tomorrowFull = isCapacityFullyConsumed(hub, dates.tomorrow);
+
+  return {
+    ...dates,
+    todayFull,
+    tomorrowFull,
+    bothFull: todayFull && tomorrowFull
+  };
 }
 
 async function loadData(){
@@ -857,6 +979,9 @@ function processDataSet(payload) {
 
 function init(payload, cpdPayload){
   HUB_MAP = {};
+
+  // Load Hub_Capacity data from the same data.json payload
+  processHubCapacity(payload);
 
   const mainData = processDataSet(payload);
   RAW = mainData.rows;
@@ -1561,32 +1686,63 @@ const hubRows = filterByDrr(
   // };
 
 
-      const getSuggText = d => {
-    // Condition 1: total breaches missing or ≤ 400
-    // Condition 2: breach % ≤ 2%
-    const breachPct = ((d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0)) / ((d.p || 0) + (d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0)) * 100;
-  
-    if (!d.t || d.t <= 400 || breachPct <= 2) {
+      // ─────────────────────────────────────────────
+  // SUGGESTION LOGIC
+  //
+  // STEP 1: Grand Total % > 2% AND DRR > 400?
+  //   NO  → No buffer required
+  //   YES → Continue
+  //
+  // STEP 2: Are BOTH Today and Tomorrow fully consumed?
+  //   YES → Take capacity action
+  //   NO  → Continue with 75% logic
+  //
+  // STEP 3: Dispatch Breach / Grand Total > 75%?
+  //   YES → Take 4 hrs buffer
+  //   NO  → Take 24 hrs buffer
+  // ─────────────────────────────────────────────
+  const getSuggText = d => {
+
+    const grandTotal = Number(d.t) || 0;
+    const drr = Number(d.p) || 0;
+
+    // Grand Total % uses the same formula as the table.
+    const denominator = drr + grandTotal;
+    const grandTotalPct = denominator > 0
+      ? (grandTotal / denominator) * 100
+      : 0;
+
+    // STEP 1
+    if(grandTotalPct <= 2 || drr <= 400){
       return 'No buffer required';
     }
-  
-    // Calculate ratio of Dispatch Breach to Daily Total
-    const ratio = (d.d || 0) / (d.t || 1);
-  
-    // If Dispatch Breach / Daily Total > 75% → 4 hrs buffer
-    if (ratio > 0.75) {
+
+    // STEP 2 — BOTH Today AND Tomorrow must be fully consumed.
+    const capacityStatus = getHubCapacityStatus(d.ph);
+
+    if(capacityStatus.bothFull){
+      return 'Take capacity action';
+    }
+
+    // STEP 3 — existing 75% logic.
+    const dispatchRatio = grandTotal > 0
+      ? (Number(d.d) || 0) / grandTotal
+      : 0;
+
+    if(dispatchRatio > 0.75){
       return 'Take 4 hrs buffer';
     }
-  
-    // Otherwise → 24 hrs buffer
+
     return 'Take 24 hrs buffer';
   };
 
 
   const getSuggStyle = sugg => {
-    if (sugg === 'No buffer required') return 'color:var(--green)';
-    if (sugg.includes('24')) return 'color:var(--amber)';
-    return 'color:var(--blue)';
+    if(sugg === 'No buffer required') return 'color:var(--green)';
+    if(sugg === 'Take capacity action') return 'color:var(--red);font-weight:800';
+    if(sugg.includes('24')) return 'color:var(--amber)';
+    if(sugg.includes('4 hrs')) return 'color:var(--blue)';
+    return 'color:var(--text)';
   };
 
   let body = '<tbody>';
