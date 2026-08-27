@@ -1606,7 +1606,7 @@ const hubRows = filterByDrr(
     const denominator = (d.p || 0) + totalBreaches;
     const breachPct = denominator > 0 ? (totalBreaches / denominator) * 100 : 0;
 
-    if (breachPct <= 2 && (d.t || 0) <= 400) {
+    if (breachPct <= 2 || (d.t || 0) <= 400) {
       return 'No buffer required';
     }
 
