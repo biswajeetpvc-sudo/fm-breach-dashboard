@@ -674,6 +674,7 @@ let CPD_RAW = [];
 let PICKED_MAP = {}; 
 let CPD_PICKED_MAP = {}; 
 let HUB_MAP = {}; 
+let CAPACITY_MAP = {}; // hubNorm -> { date -> { capacity, consumption } }
 let DATES = [];
 let filtered = [];
 let cpdFiltered = [];
@@ -855,8 +856,39 @@ function processDataSet(payload) {
   return { rows: processedRows, pickedMap };
 }
 
+function buildCapacityMap(payload) {
+  CAPACITY_MAP = {};
+  const capData = (payload && payload.hub_capacity) ? payload.hub_capacity : [];
+  capData.forEach(row => {
+    const hubNorm = String(row.hub || '').trim().toLowerCase();
+    const date = normalizeDateStr(row.date);
+    if (!hubNorm || !date) return;
+    if (!CAPACITY_MAP[hubNorm]) CAPACITY_MAP[hubNorm] = {};
+    // If multiple entries per hub+date, take the one with higher capacity (or accumulate)
+    if (!CAPACITY_MAP[hubNorm][date]) {
+      CAPACITY_MAP[hubNorm][date] = { capacity: 0, consumption: 0 };
+    }
+    CAPACITY_MAP[hubNorm][date].capacity += Number(row.capacity) || 0;
+    CAPACITY_MAP[hubNorm][date].consumption += Number(row.consumption) || 0;
+  });
+}
+
+function getCapacityDates() {
+  // Returns sorted dates from capacity data; last 2 are "today" and "tomorrow"
+  const allDates = new Set();
+  Object.values(CAPACITY_MAP).forEach(dateMap => Object.keys(dateMap).forEach(d => allDates.add(d)));
+  return [...allDates].sort((a, b) => dv(a) - dv(b));
+}
+
+function isCapacityConsumed(hubNorm, date) {
+  const entry = CAPACITY_MAP[hubNorm] && CAPACITY_MAP[hubNorm][date];
+  if (!entry || entry.capacity <= 0) return false;
+  return entry.consumption >= entry.capacity;
+}
+
 function init(payload, cpdPayload){
   HUB_MAP = {};
+  buildCapacityMap(payload);
 
   const mainData = processDataSet(payload);
   RAW = mainData.rows;
@@ -1404,10 +1436,17 @@ function sortRows(rows,col,asc,buckets,periodDays){
   }
 
   const getSuggVal = r => {
-    if (!r.t || r.t === 0) return 'No buffer required';
-    const avgPickup = ((r.a || 0) + (r.e || 0) + (r.ar || 0)) / (periodDays || 1);
-    const avgDispatch = (r.d || 0) / (periodDays || 1);
-    return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
+    const totalBreaches = (r.a || 0) + (r.e || 0) + (r.ar || 0) + (r.d || 0);
+    const denom = (r.p || 0) + totalBreaches;
+    const bp = denom > 0 ? (totalBreaches / denom) * 100 : 0;
+    if (bp <= 2 && (r.t || 0) <= 400) return 'No buffer required';
+    const capDates = getCapacityDates();
+    const todayDate = capDates.length >= 2 ? capDates[capDates.length - 2] : null;
+    const tomorrowDate = capDates.length >= 1 ? capDates[capDates.length - 1] : null;
+    const hn = String(r.ph || '').trim().toLowerCase();
+    if (todayDate && tomorrowDate && isCapacityConsumed(hn, todayDate) && isCapacityConsumed(hn, tomorrowDate)) return 'Take Capacity Action';
+    const ratio = (r.d || 0) / (r.t || 1);
+    return ratio > 0.75 ? 'Take 4 hrs buffer' : 'Take 24 hrs buffer';
   };
 
   return [...rows].sort((a,b) => {
@@ -1517,7 +1556,7 @@ const hubRows = filterByDrr(
   if(sE) header += thC(prefix + 'EKL Issue', numCI++, 'r');
   if(sR) header += thC(prefix + 'Auto Reset', numCI++, 'r');
   if(sD) header += thC(prefix + 'Dispatch Breach', numCI++, 'r');
-  header += thC(showAverage ? 'Avg Daily Total' : 'Grand Total', numCI++, 'r') + thC(prefix + 'Breach %', numCI++, 'r') + thC('Suggestion', numCI++) + '</tr></thead>';
+  header += thC(showAverage ? 'Avg Daily Total' : 'Grand Total', numCI++, 'r') + thC(prefix + 'Breach %', numCI++, 'r') + thC('Cap Today', numCI++, 'r') + thC('Cap Tomorrow', numCI++, 'r') + thC('Suggestion', numCI++) + '</tr></thead>';
 
   const zbadge = z => '<span class="zbadge z-' + (z || 'Unknown') + '">' + (z || '?') + '</span>';
 
@@ -1562,38 +1601,64 @@ const hubRows = filterByDrr(
 
 
       const getSuggText = d => {
-    // Condition 1: total breaches missing or ≤ 400
-    // Condition 2: breach % ≤ 2%
-    const breachPct = ((d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0)) / ((d.p || 0) + (d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0)) * 100;
-  
-    if (!d.t || d.t <= 400 || breachPct <= 2) {
+    // Step 1: Breach % <= 2% AND Grand Total <= 400 → No buffer required
+    const totalBreaches = (d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0);
+    const denominator = (d.p || 0) + totalBreaches;
+    const breachPct = denominator > 0 ? (totalBreaches / denominator) * 100 : 0;
+
+    if (breachPct <= 2 && (d.t || 0) <= 400) {
       return 'No buffer required';
     }
-  
-    // Calculate ratio of Dispatch Breach to Daily Total
+
+    // Step 2: Check if capacity is consumed for this hub on today AND tomorrow
+    const capDates = getCapacityDates();
+    const todayDate = capDates.length >= 2 ? capDates[capDates.length - 2] : null;
+    const tomorrowDate = capDates.length >= 1 ? capDates[capDates.length - 1] : null;
+    const hubNorm = String(d.ph || '').trim().toLowerCase();
+
+    const todayConsumed = todayDate ? isCapacityConsumed(hubNorm, todayDate) : false;
+    const tomorrowConsumed = tomorrowDate ? isCapacityConsumed(hubNorm, tomorrowDate) : false;
+
+    if (todayConsumed && tomorrowConsumed) {
+      return 'Take Capacity Action';
+    }
+
+    // Step 3: Dispatch breach % logic (existing)
     const ratio = (d.d || 0) / (d.t || 1);
-  
-    // If Dispatch Breach / Daily Total > 75% → 4 hrs buffer
     if (ratio > 0.75) {
       return 'Take 4 hrs buffer';
     }
-  
-    // Otherwise → 24 hrs buffer
     return 'Take 24 hrs buffer';
   };
 
 
   const getSuggStyle = sugg => {
     if (sugg === 'No buffer required') return 'color:var(--green)';
+    if (sugg === 'Take Capacity Action') return 'color:var(--red);font-weight:700';
     if (sugg.includes('24')) return 'color:var(--amber)';
     return 'color:var(--blue)';
   };
 
   let body = '<tbody>';
 
+  const capDates = getCapacityDates();
+  const todayDate = capDates.length >= 2 ? capDates[capDates.length - 2] : null;
+  const tomorrowDate = capDates.length >= 1 ? capDates[capDates.length - 1] : null;
+
+  const capCell = (hubNorm, date) => {
+    if (!date) return '<td class="r" style="color:var(--muted)">—</td>';
+    const entry = CAPACITY_MAP[hubNorm] && CAPACITY_MAP[hubNorm][date];
+    if (!entry || entry.capacity <= 0) return '<td class="r" style="color:var(--muted)">N/A</td>';
+    const consumed = entry.consumption >= entry.capacity;
+    const pctVal = ((entry.consumption / entry.capacity) * 100).toFixed(1) + '%';
+    const style = consumed ? 'color:var(--red);font-weight:700' : 'color:var(--green);font-weight:600';
+    return '<td class="r" style="' + style + '" title="' + N(Math.round(entry.consumption)) + ' / ' + N(entry.capacity) + '">' + pctVal + (consumed ? ' ⚠' : '') + '</td>';
+  };
+
   hubRows.forEach((r, idx) => {
     const rowId = 'sub-' + sec + '-' + idx;
     const sugg = getSuggText(r);
+    const hubNorm = String(r.ph || '').trim().toLowerCase();
 
     body += '<tr>' +
       '<td><span class="expand-btn" onclick="toggleRow(\'' + rowId + '\', this)">+</span> ' + r.ph + '</td>' +
@@ -1602,6 +1667,8 @@ const hubRows = filterByDrr(
       '<td>' + (r.rm || '-') + '</td>' +
       '<td>' + (r.am || '-') + '</td>' +
       cells(r) +
+      capCell(hubNorm, todayDate) +
+      capCell(hubNorm, tomorrowDate) +
       '<td style="font-weight:600;' + getSuggStyle(sugg) + '">' + sugg + '</td>' +
       '</tr>';
 
@@ -1609,7 +1676,7 @@ const hubRows = filterByDrr(
       .filter(dk => (r.byDate[dk].t || 0) > 0)
       .sort((a,b) => dv(b) - dv(a));
 
-    let subHtml = '<tr id="' + rowId + '" style="display:none;"><td colspan="13">' +
+    let subHtml = '<tr id="' + rowId + '" style="display:none;"><td colspan="15">' +
       '<div class="sub-table-container"><strong>Breach Days Breakdown for ' + r.ph + '</strong>';
 
     if (breachOnlyDates.length === 0) {
@@ -1648,6 +1715,7 @@ const hubRows = filterByDrr(
   body += '<tr class="rt">' +
     '<td colspan="5">GRAND TOTAL</td>' +
     cells(gt) +
+    '<td class="r">—</td><td class="r">—</td>' +
     '<td style="font-weight:700;' + getSuggStyle(gtSugg) + '">' + gtSugg + '</td>' +
     '</tr></tbody>';
 
