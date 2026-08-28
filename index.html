@@ -1866,7 +1866,7 @@ const hubRows = filterByDrr(
     const todayPct = getCapPct(hubNorm, todayDate);
     const tomorrowPct = getCapPct(hubNorm, tomorrowDate);
 
-    if (todayPct >= 100 && tomorrowPct >= 70) {
+    if (todayPct >= 99.9 && tomorrowPct >= 70) {
       return 'Take Capacity Action';
     }
 
