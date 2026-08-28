@@ -562,20 +562,18 @@ td.r{
   </div>
 
   <div class="fg">
-  <label>Functional / CPD</label>
-
-  <select id="f-type" onchange="handleFunctionalChange()">
-    <option value="all">Functional Breach</option>
-    <option value="cpd">CPD Breach</option>
-  </select>
-</div>
+    <label>Functional / CPD</label>
+    <select id="f-type" onchange="handleFunctionalChange()">
+      <option value="all">Functional Breach</option>
+      <option value="cpd">CPD Breach</option>
+    </select>
+  </div>
 
   <div class="ptabs" id="tp-drr">
-  <div class="pt on" onclick="setDrrMode('all',this)">All DRR</div>
-  <div class="pt" onclick="setDrrMode('lt500',this)">&lt; 500 DRR</div>
-  <div class="pt" onclick="setDrrMode('gte500',this)">≥ 500 DRR</div>
-</div>
-
+    <div class="pt on" onclick="setDrrMode('all',this)">All DRR</div>
+    <div class="pt" onclick="setDrrMode('lt500',this)">&lt; 500 DRR</div>
+    <div class="pt" onclick="setDrrMode('gte500',this)">≥ 500 DRR</div>
+  </div>
 
   <button class="btn-reset" onclick="resetFilters()">Reset</button>
 
@@ -704,7 +702,7 @@ let CPD_RAW = [];
 let PICKED_MAP = {}; 
 let CPD_PICKED_MAP = {}; 
 let HUB_MAP = {}; 
-let CAPACITY_MAP = {}; // hubNorm -> { date -> { capacity, consumption } }
+let CAPACITY_MAP = {}; 
 let DATES = [];
 let filtered = [];
 let cpdFiltered = [];
@@ -727,16 +725,7 @@ function N(num) {
   return (num || 0).toLocaleString();
 }
 
-// function pct(t, p) {
-//   if (!p || p === 0) {
-//     return t > 0 ? '100.00%' : '0.00%';
-//   }
-//   return ((t / p) * 100).toFixed(2) + '%';
-// }
-
-
-  function handleFunctionalChange(){
-
+function handleFunctionalChange(){
   const selectedValue = document.getElementById('f-type').value;
 
   if(selectedValue === 'cpd'){
@@ -747,23 +736,21 @@ function N(num) {
   applyFilters();
 }
 
-  function setDrrMode(mode, el){
+function setDrrMode(mode, el){
   drrMode = mode;
   document.getElementById('tp-drr').querySelectorAll('.pt').forEach(t => t.classList.remove('on'));
   el.classList.add('on');
-  applyFilters(); // re-run filters and rendering
+  applyFilters(); 
 }
 
-  function filterByDrr(rows){
+function filterByDrr(rows){
   if(drrMode === 'all') return rows;
   if(drrMode === 'lt500') return rows.filter(r => (r.p || 0) < 500);
   if(drrMode === 'gte500') return rows.filter(r => (r.p || 0) >= 500);
   return rows;
 }
 
-  
-
-  function pct(d) {
+function pct(d) {
   const numerator = (d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0);
   const denominator = (d.p || 0) + numerator;
   if (denominator === 0) return '0.00%';
@@ -896,7 +883,6 @@ function buildCapacityMap(payload) {
     const date = normalizeDateStr(row.date);
     if (!hubNorm || !date) return;
     if (!CAPACITY_MAP[hubNorm]) CAPACITY_MAP[hubNorm] = {};
-    // If multiple entries per hub+date, take the one with higher capacity (or accumulate)
     if (!CAPACITY_MAP[hubNorm][date]) {
       CAPACITY_MAP[hubNorm][date] = { capacity: 0, consumption: 0 };
     }
@@ -906,7 +892,6 @@ function buildCapacityMap(payload) {
 }
 
 function getCapacityDates() {
-  // Returns sorted dates from capacity data; last 2 are "today" and "tomorrow"
   const allDates = new Set();
   Object.values(CAPACITY_MAP).forEach(dateMap => Object.keys(dateMap).forEach(d => allDates.add(d)));
   return [...allDates].sort((a, b) => dv(a) - dv(b));
@@ -994,56 +979,32 @@ function buildDateList(){
     const chk = document.createElement('input');
     chk.type = 'checkbox';
     chk.value = d;
-
-    // Show checkbox according to currently active dates
     chk.checked = active.has(d);
 
     chk.onchange = () => {
-
-      // ─────────────────────────────────────
-      // CASE 1: Current state = NONE
-      // Remove __none__ before selecting a date
-      // ─────────────────────────────────────
       if(selectedDates.has('__none__')){
         selectedDates = new Set();
       }
-
-      // ─────────────────────────────────────
-      // CASE 2: Current state = ALL DATES
-      // Convert implicit "all" into explicit
-      // selection before changing one checkbox
-      // ─────────────────────────────────────
       else if(selectedDates.size === 0){
         selectedDates = new Set(DATES);
       }
 
-      // Add or remove clicked date
       if(chk.checked){
         selectedDates.add(d);
       } else {
         selectedDates.delete(d);
       }
 
-      // ─────────────────────────────────────
-      // If every date is selected,
-      // represent it as "All Dates"
-      // ─────────────────────────────────────
       if(selectedDates.size === DATES.length){
         selectedDates = new Set();
       }
 
-      // ─────────────────────────────────────
-      // If no date remains selected,
-      // represent it as "None selected"
-      // ─────────────────────────────────────
       if(selectedDates.size === 0){
         selectedDates = new Set(['__none__']);
       }
 
       updateDateBtnLabel();
       applyFilters();
-
-      // Refresh checkbox UI
       refreshDateCheckboxes();
     };
 
@@ -1055,12 +1016,8 @@ function buildDateList(){
   updateDateBtnLabel();
 }
 
-
-// Refresh only checkbox states
 function refreshDateCheckboxes(){
-
   const active = activeDates();
-
   document
     .querySelectorAll('#date-list input[type="checkbox"]')
     .forEach(chk => {
@@ -1068,182 +1025,68 @@ function refreshDateCheckboxes(){
     });
 }
 
-
-// Select All
 function selectAllDates(){
-
-  // Empty set represents ALL dates
   selectedDates = new Set();
-
   buildDateList();
   applyFilters();
 }
 
-
-// Select None
 function clearAllDates(){
-
-  // Special marker represents NO dates
   selectedDates = new Set(['__none__']);
-
   buildDateList();
   applyFilters();
 }
 
-
-// Update date button text
 function updateDateBtnLabel(){
-
   const lbl = document.getElementById('date-btn-label');
 
-  // Empty set = All Dates
   if(selectedDates.size === 0){
     lbl.textContent = 'All Dates';
     return;
   }
-
-  // Special None state
   if(selectedDates.has('__none__')){
     lbl.textContent = 'None selected';
     return;
   }
-
-  // One selected date
   if(selectedDates.size === 1){
     lbl.textContent = [...selectedDates][0];
     return;
   }
-
-  // Multiple selected dates
   lbl.textContent = selectedDates.size + ' dates selected';
 }
 
-
-// Open / close date dropdown
 function toggleDateDD(e){
-
   e.stopPropagation();
-
-  document
-    .getElementById('date-dd')
-    .classList
-    .toggle('open');
+  document.getElementById('date-dd').classList.toggle('open');
 }
 
-
-// Close dropdown when clicking outside
 document.addEventListener('click', e => {
-
   const dateFg = document.getElementById('date-fg');
-
   if(dateFg && !dateFg.contains(e.target)){
-    document
-      .getElementById('date-dd')
-      .classList
-      .remove('open');
+    document.getElementById('date-dd').classList.remove('open');
   }
 });
 
-
-// Return the actual active dates
 function activeDates(){
-
-  // Empty set means ALL dates
   if(selectedDates.size === 0){
     return new Set(DATES);
   }
-
-  // __none__ means no dates
   if(selectedDates.has('__none__')){
     return new Set();
   }
-
-  // Otherwise return selected dates
   return new Set(selectedDates);
 }
-  
-
-// function buildDateList(){
-//   const list = document.getElementById('date-list');
-//   list.innerHTML = '';
-//   const active = activeDates();
-
-//   DATES.forEach(d => {
-//     const item = document.createElement('label');
-//     item.className = 'date-item';
-
-//     const chk = document.createElement('input');
-//     chk.type = 'checkbox';
-//     chk.value = d;
-//     chk.checked = selectedDates.size === 0 || active.has(d);
-
-//     chk.onchange = () => {
-//       if(selectedDates.size === 0) selectedDates = new Set(DATES);
-//       if(chk.checked) selectedDates.add(d);
-//       else selectedDates.delete(d);
-      
-//       if(selectedDates.size === DATES.length) selectedDates = new Set();
-      
-//       updateDateBtnLabel();
-//       applyFilters();
-//     };
-
-//     item.appendChild(chk);
-//     item.appendChild(document.createTextNode(d));
-//     list.appendChild(item);
-//   });
-
-//   updateDateBtnLabel();
-// }
-
-// function selectAllDates(){
-//   selectedDates = new Set();
-//   buildDateList();
-//   applyFilters();
-// }
-
-// function clearAllDates(){
-//   selectedDates = new Set(['__none__']);
-//   buildDateList();
-//   applyFilters();
-// }
-
-// function updateDateBtnLabel(){
-//   const lbl = document.getElementById('date-btn-label');
-//   if(selectedDates.size === 0) lbl.textContent = 'All Dates';
-//   else if(selectedDates.has('__none__')) lbl.textContent = 'None selected';
-//   else if(selectedDates.size === 1) lbl.textContent = [...selectedDates][0];
-//   else lbl.textContent = selectedDates.size + ' dates selected';
-// }
-
-// function toggleDateDD(e){
-//   e.stopPropagation();
-//   document.getElementById('date-dd').classList.toggle('open');
-// }
-
-// document.addEventListener('click', e => {
-//   if(!document.getElementById('date-fg').contains(e.target)){
-//     document.getElementById('date-dd').classList.remove('open');
-//   }
-// });
-
-// function activeDates(){
-//   if(selectedDates.size === 0) return new Set(DATES);
-//   if(selectedDates.has('__none__')) return new Set();
-//   return selectedDates;
-// }
 
 // ─────────────────────────────────────────────
 // MULTI-SELECT DROPDOWNS (State / City)
 // ─────────────────────────────────────────────
 
 const multiSelected = { state: new Set(), city: new Set() };
-// empty set = All; populated = those specific values
 
 function getSelectedVals(key) {
   const s = multiSelected[key];
   if (!s || s.size === 0) return [];
-  if (s.has('__none__')) return ['__none__']; // nothing matches
+  if (s.has('__none__')) return ['__none__'];
   return [...s];
 }
 
@@ -1260,11 +1103,10 @@ function buildMultiList(key, values) {
     chk.checked = sel.size === 0 || sel.has(v);
     chk.onchange = () => {
       if (sel.size === 0) {
-        // was "all" — expand to explicit
         values.forEach(vv => sel.add(vv));
       }
       if (chk.checked) sel.add(v); else sel.delete(v);
-      if (sel.size === values.length) sel.clear(); // back to "all"
+      if (sel.size === values.length) sel.clear();
       updateMultiLabel(key, values);
       refreshMultiCheckboxes(key, values);
       if (key === 'state') cascadeCityFilter();
@@ -1303,11 +1145,8 @@ function selectAllMulti(key) {
 }
 
 function clearAllMulti(key) {
-  // "None" — keep set empty but treat as "none" by using a sentinel
-  // Actually: just uncheck all visually, set = all values, then clear — 
-  // simpler: we use a __none__ sentinel like dates
-  const values = [...document.querySelectorAll('#' + key + '-list input')].map(i => i.value);
   multiSelected[key] = new Set(['__none__']);
+  const values = [...document.querySelectorAll('#' + key + '-list input')].map(i => i.value);
   updateMultiLabel(key, values);
   refreshMultiCheckboxes(key, values);
   applyFilters();
@@ -1315,7 +1154,6 @@ function clearAllMulti(key) {
 
 function toggleMultiDD(e, ddId) {
   e.stopPropagation();
-  // close other dropdowns
   ['state-dd','city-dd'].forEach(id => {
     if (id !== ddId) document.getElementById(id).classList.remove('open');
   });
@@ -1339,12 +1177,9 @@ function cascadeCityFilter() {
     allMeta.filter(m => !selStates.length || selStates.includes(m.state))
           .map(m => m.city).filter(Boolean)
   )].sort();
-  // Reset city selection when state changes
   multiSelected.city = new Set();
   buildMultiList('city', cities);
 }
-
-function onStateChange(){ cascadeCityFilter(); applyFilters(); }
 
 function pop(id,vals){
   const el = document.getElementById(id);
@@ -1371,8 +1206,8 @@ function resetFilters(){
 }
 
 function filterDataset(sourceArray) {
-  const states = getSelectedVals('f-state');
-  const cities = getSelectedVals('f-city');
+  const states = getSelectedVals('state');
+  const cities = getSelectedVals('city');
   const zone = fv('f-zone');
   const gm = fv('f-gm');
   const rm = fv('f-rm');
@@ -1429,8 +1264,8 @@ function computeHubPickups(datesSet, targetMap = PICKED_MAP) {
   const hubTotals = {};
   let overallTotal = 0;
 
-  const fState = getSelectedVals('f-state');
-  const fCity = getSelectedVals('f-city');
+  const fState = getSelectedVals('state');
+  const fCity = getSelectedVals('city');
   const fZone = fv('f-zone');
   const fGm = fv('f-gm');
   const fRm = fv('f-rm');
@@ -1491,9 +1326,7 @@ function renderKPIs(){
   const overallPct = totalDenom > 0 ? ((totalBreaches / totalDenom) * 100).toFixed(2) + '%' : '0.00%';
 
   const kpiPct = (numerator) => {
-    const denom = finalPicked + (isAvg ? (totalBreaches) : totalBreaches);
-    // per-bucket %: numerator / (picked + all breaches)
-    const d2 = (isAvg ? finalPicked : finalPicked) + totalBreaches;
+    const d2 = finalPicked + totalBreaches;
     if (!d2) return '0.00%';
     return ((numerator / d2) * 100).toFixed(2) + '%';
   };
@@ -1590,8 +1423,7 @@ function renderCharts(){
               return ctx.label + ': ' + pct + '%';
             }
           }
-        },
-        datalabels: false
+        }
       }
     },
     plugins:[{
@@ -1743,9 +1575,9 @@ function renderSec(sec){
   });
 
   const ss = sortState[sec];
-const hubRows = filterByDrr(
-  sortRows(Object.values(agg), ss.col, ss.asc, buckets, periodDays)
-);
+  const hubRows = filterByDrr(
+    sortRows(Object.values(agg), ss.col, ss.asc, buckets, periodDays)
+  );
   
   const gt = { p:0, a:0, e:0, ar:0, d:0, t:0 };
   hubRows.forEach(r => { gt.p += r.p; gt.a += r.a; gt.e += r.e; gt.ar += r.ar; gt.d += r.d; gt.t += r.t; });
@@ -1787,36 +1619,11 @@ const hubRows = filterByDrr(
     if(sR) html += '<td class="r">' + formatValue(d.ar) + '</td>';
     if(sD) html += '<td class="r">' + formatValue(d.d) + '</td>';
     html += '<td class="r" style="color:var(--blue);font-weight:700">' + formatValue(d.t) + '</td>';
-    // html += '<td class="r">' + pct(d.t, d.p) + '</td>';
     html += '<td class="r">' + pct(d) + '</td>';
     return html;
   };
 
-  // const getSuggText = d => {
-  //   if (!d.t || d.t === 0) {
-  //     return 'No buffer required';
-  //   }
-  //   const avgPickup = ((d.a || 0) + (d.e || 0) + (d.ar || 0)) / periodDays;
-  //   const avgDispatch = (d.d || 0) / periodDays;
-  //   return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
-
-  // const getSuggText = d => {
-  // if (!d.t || d.t === 0) {
-  //   return 'No buffer required';
-  // }
-  // // Calculate ratio of Dispatch Breach to Daily Total
-  // const ratio = (d.d || 0) / (d.t || 1);
-
-  // // If Dispatch Breach / Daily Total > 75%, take 4 hrs buffer
-  // if (ratio > 0.75) {
-  //   return 'Take 4 hrs buffer';
-  // }
-  // return 'Take 24 hrs buffer';
-  // };
-
-
-      const getSuggText = d => {
-    // Step 1: Breach % <= 2% AND Grand Total <= 400 → No buffer required
+  const getSuggText = d => {
     const totalBreaches = (d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0);
     const denominator = (d.p || 0) + totalBreaches;
     const breachPct = denominator > 0 ? (totalBreaches / denominator) * 100 : 0;
@@ -1825,7 +1632,6 @@ const hubRows = filterByDrr(
       return 'No buffer required';
     }
 
-    // Step 2: Check if capacity is consumed for this hub on today AND tomorrow
     const capDates = getCapacityDates();
     const todayDate = capDates.length >= 2 ? capDates[capDates.length - 2] : null;
     const tomorrowDate = capDates.length >= 1 ? capDates[capDates.length - 1] : null;
@@ -1838,14 +1644,12 @@ const hubRows = filterByDrr(
       return 'Take Capacity Action';
     }
 
-    // Step 3: Dispatch breach % logic (existing)
     const ratio = (d.d || 0) / (d.t || 1);
     if (ratio > 0.75) {
       return 'Take 4 hrs buffer';
     }
     return 'Take 24 hrs buffer';
   };
-
 
   const getSuggStyle = sugg => {
     if (sugg === 'No buffer required') return 'color:var(--green)';
