@@ -1679,7 +1679,7 @@ function sortRows(rows,col,asc,buckets,periodDays){
     const totalBreaches = (r.a || 0) + (r.e || 0) + (r.ar || 0) + (r.d || 0);
     const denom = (r.p || 0) + totalBreaches;
     const bp = denom > 0 ? (totalBreaches / denom) * 100 : 0;
-    if (bp <= 2 && (r.t || 0) <= 400) return 'No buffer required';
+    if (bp <= 2 || (r.t || 0) <= 400) return 'No buffer required';
     const capDates = getCapacityDates();
     const todayDate = capDates.length >= 2 ? capDates[capDates.length - 2] : null;
     const tomorrowDate = capDates.length >= 1 ? capDates[capDates.length - 1] : null;
@@ -1841,16 +1841,16 @@ const hubRows = filterByDrr(
 
 
       const getSuggText = d => {
-    // Step 1: Breach % <= 2% AND Grand Total <= 400 → No buffer required
+    // Step 1: Grand Total <= 400 OR Breach % <= 2% → No buffer required
     const totalBreaches = (d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0);
     const denominator = (d.p || 0) + totalBreaches;
     const breachPct = denominator > 0 ? (totalBreaches / denominator) * 100 : 0;
 
-    if (breachPct <= 2 && (d.t || 0) <= 400) {
+    if ((d.t || 0) <= 400 || breachPct <= 2) {
       return 'No buffer required';
     }
 
-    // Step 2: If Cap Today = 100% AND Cap Tomorrow = 100% → Take Capacity Action
+    // Step 2: Cap today >= 100% AND cap tomorrow >= 70% → Take Capacity Action
     const capDates = getCapacityDates();
     const todayDate = capDates.length >= 2 ? capDates[capDates.length - 2] : null;
     const tomorrowDate = capDates.length >= 1 ? capDates[capDates.length - 1] : null;
@@ -1866,11 +1866,11 @@ const hubRows = filterByDrr(
     const todayPct = getCapPct(hubNorm, todayDate);
     const tomorrowPct = getCapPct(hubNorm, tomorrowDate);
 
-    if (todayPct >= 100 && tomorrowPct >= 100) {
+    if (todayPct >= 100 && tomorrowPct >= 70) {
       return 'Take Capacity Action';
     }
 
-    // Step 3: Dispatch breach % logic (existing)
+    // Step 3: Dispatch breach > 75% of grand total → Take 4 hrs buffer
     const ratio = (d.d || 0) / (d.t || 1);
     if (ratio > 0.75) {
       return 'Take 4 hrs buffer';
