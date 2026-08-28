@@ -1679,7 +1679,7 @@ function sortRows(rows,col,asc,buckets,periodDays){
     const totalBreaches = (r.a || 0) + (r.e || 0) + (r.ar || 0) + (r.d || 0);
     const denom = (r.p || 0) + totalBreaches;
     const bp = denom > 0 ? (totalBreaches / denom) * 100 : 0;
-    if (bp <= 2 || (r.t || 0) <= 400) return 'No buffer required';
+    if (bp <= 2 && (r.t || 0) <= 400) return 'No buffer required';
     const capDates = getCapacityDates();
     const todayDate = capDates.length >= 2 ? capDates[capDates.length - 2] : null;
     const tomorrowDate = capDates.length >= 1 ? capDates[capDates.length - 1] : null;
@@ -1846,20 +1846,27 @@ const hubRows = filterByDrr(
     const denominator = (d.p || 0) + totalBreaches;
     const breachPct = denominator > 0 ? (totalBreaches / denominator) * 100 : 0;
 
-    if (breachPct <= 2 || (d.t || 0) <= 400) {
+    if (breachPct <= 2 && (d.t || 0) <= 400) {
       return 'No buffer required';
     }
 
-    // Step 2: Check if capacity is consumed for this hub on today AND tomorrow
+    // Step 2: If Cap Today = 100% AND Cap Tomorrow = 100% → Take Capacity Action
     const capDates = getCapacityDates();
     const todayDate = capDates.length >= 2 ? capDates[capDates.length - 2] : null;
     const tomorrowDate = capDates.length >= 1 ? capDates[capDates.length - 1] : null;
     const hubNorm = String(d.ph || '').trim().toLowerCase();
 
-    const todayConsumed = todayDate ? isCapacityConsumed(hubNorm, todayDate) : false;
-    const tomorrowConsumed = tomorrowDate ? isCapacityConsumed(hubNorm, tomorrowDate) : false;
+    const getCapPct = (hNorm, date) => {
+      if (!date) return 0;
+      const entry = CAPACITY_MAP[hNorm] && CAPACITY_MAP[hNorm][date];
+      if (!entry || entry.capacity <= 0) return 0;
+      return (entry.consumption / entry.capacity) * 100;
+    };
 
-    if (todayConsumed && tomorrowConsumed) {
+    const todayPct = getCapPct(hubNorm, todayDate);
+    const tomorrowPct = getCapPct(hubNorm, tomorrowDate);
+
+    if (todayPct >= 100 && tomorrowPct >= 100) {
       return 'Take Capacity Action';
     }
 
