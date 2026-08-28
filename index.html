@@ -1896,10 +1896,11 @@ const hubRows = filterByDrr(
     if (!date) return '<td class="r" style="color:var(--muted)">—</td>';
     const entry = CAPACITY_MAP[hubNorm] && CAPACITY_MAP[hubNorm][date];
     if (!entry || entry.capacity <= 0) return '<td class="r" style="color:var(--muted)">N/A</td>';
-    const consumed = entry.consumption >= entry.capacity;
+    const capPct = (entry.consumption / entry.capacity) * 100;
+    const consumed = capPct >= 99.9;
     const pctVal = ((entry.consumption / entry.capacity) * 100).toFixed(1) + '%';
     const style = consumed ? 'color:var(--red);font-weight:700' : 'color:var(--green);font-weight:600';
-    return '<td class="r" style="' + style + '" title="' + N(Math.round(entry.consumption)) + ' / ' + N(entry.capacity) + '">' + pctVal + (consumed ? ' ⚠' : '') + '</td>';
+    return '<td class="r" style="' + style + '" title="' + N(Math.round(entry.consumption)) + ' / ' + N(entry.capacity) + '">' + pctVal  + '</td>';
   };
 
   hubRows.forEach((r, idx) => {
