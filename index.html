@@ -497,6 +497,20 @@ td.r{
   </div>
 
   <div class="fg">
+    <label>State</label>
+    <select id="f-state" onchange="onStateChange()">
+      <option value="">All States</option>
+    </select>
+  </div>
+
+  <div class="fg">
+    <label>City</label>
+    <select id="f-city" onchange="applyFilters()">
+      <option value="">All Cities</option>
+    </select>
+  </div>
+
+  <div class="fg">
     <label>Zone</label>
     <select id="f-zone" onchange="applyFilters()">
       <option value="">All Zones</option>
@@ -834,6 +848,8 @@ function processDataSet(payload) {
     if (!HUB_MAP[hubNorm] || !HUB_MAP[hubNorm].zone) {
       HUB_MAP[hubNorm] = {
         ph: hubName,
+        state: r.state || '',
+        city: r.city || '',
         zone: r.zone || '',
         gm: r.gm || '',
         rm: r.rm || '',
@@ -932,6 +948,8 @@ function buildFilters(){
   const allMeta = Object.values(HUB_MAP);
   const uniq = k => [...new Set(allMeta.map(m => m[k]).filter(Boolean))].sort();
 
+  pop('f-state', uniq('state'));
+  pop('f-city', uniq('city'));
   pop('f-zone',uniq('zone'));
   pop('f-gm',uniq('gm'));
   pop('f-rm',uniq('rm'));
@@ -1197,6 +1215,19 @@ function activeDates(){
 //   return selectedDates;
 // }
 
+function onStateChange(){
+  const state = fv('f-state');
+  const allMeta = Object.values(HUB_MAP);
+  const cities = [...new Set(
+    allMeta
+      .filter(m => !state || m.state === state)
+      .map(m => m.city)
+      .filter(Boolean)
+  )].sort();
+  pop('f-city', cities);
+  applyFilters();
+}
+
 function pop(id,vals){
   const el = document.getElementById(id);
   el.innerHTML = '<option value="">All</option>';
@@ -1209,7 +1240,7 @@ function pop(id,vals){
 }
 
 function resetFilters(){
-  ['f-zone','f-gm','f-rm','f-am','f-ph'].forEach(id => document.getElementById(id).value = '');
+  ['f-state','f-city','f-zone','f-gm','f-rm','f-am','f-ph'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('f-type').value = 'all';
   selectedDates = new Set();
   buildDateList();
@@ -1217,6 +1248,8 @@ function resetFilters(){
 }
 
 function filterDataset(sourceArray) {
+  const state = fv('f-state');
+  const city = fv('f-city');
   const zone = fv('f-zone');
   const gm = fv('f-gm');
   const rm = fv('f-rm');
@@ -1227,6 +1260,8 @@ function filterDataset(sourceArray) {
 
   return sourceArray.filter(r =>
     ad.has(normalizeDateStr(r.date)) &&
+    (!state || r.state === state) &&
+    (!city || r.city === city) &&
     (!zone || r.zone === zone) &&
     (!gm || r.gm === gm) &&
     (!rm || r.rm === rm) &&
@@ -1606,7 +1641,7 @@ const hubRows = filterByDrr(
     const denominator = (d.p || 0) + totalBreaches;
     const breachPct = denominator > 0 ? (totalBreaches / denominator) * 100 : 0;
 
-    if (breachPct <= 2 || (d.t || 0) <= 400) {
+    if (breachPct <= 2 && (d.t || 0) <= 400) {
       return 'No buffer required';
     }
 
