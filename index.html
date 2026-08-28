@@ -1236,50 +1236,53 @@ function activeDates(){
 // ─────────────────────────────────────────────
 // MULTI-SELECT DROPDOWNS (State / City)
 // ─────────────────────────────────────────────
-
-const multiSelected = { state: new Set(), city: new Set() };
-// empty set = All; populated = those specific values
+// State machine per key:
+//   mode = 'all'  → all values pass (empty selection = all)
+//   mode = 'some' → only values in selected set pass
+//   mode = 'none' → nothing passes
+const multiState = {
+  state: { mode: 'all', selected: new Set() },
+  city:  { mode: 'all', selected: new Set() }
+};
 
 function getSelectedVals(key) {
-  const s = multiSelected[key];
-  if (!s || s.size === 0) return [];
-  if (s.has('__none__')) return ['__none__']; // nothing matches
-  return [...s];
+  const ms = multiState[key];
+  if (ms.mode === 'all')  return [];           // [] means "no filter"
+  if (ms.mode === 'none') return ['__none__']; // sentinel → nothing matches
+  return [...ms.selected];
 }
 
 function buildMultiList(key, values) {
   const listEl = document.getElementById(key + '-list');
   listEl.innerHTML = '';
-  const sel = multiSelected[key];
   values.forEach(v => {
     const item = document.createElement('label');
     item.className = 'date-item';
     const chk = document.createElement('input');
     chk.type = 'checkbox';
     chk.value = v;
-  const isNone = sel.has('__none__');
-    chk.checked = !isNone && (sel.size === 0 || sel.has(v));
+    chk.checked = isChecked(key, v);
     chk.onchange = () => {
-      const wasAll = sel.size === 0;
-      const wasNone = sel.has('__none__');
-
-      // Start from a clean explicit set
-      if (wasNone) {
-        sel.clear(); // nothing was selected; now just add the clicked one
-      } else if (wasAll) {
-        // expand "all" into explicit so we can remove one
-        values.forEach(vv => sel.add(vv));
+      const ms = multiState[key];
+      // If currently "all", expanding to explicit (uncheck one item)
+      if (ms.mode === 'all') {
+        ms.selected = new Set(values);
+        ms.mode = 'some';
       }
+      // If currently "none", start fresh with just this item
+      if (ms.mode === 'none') {
+        ms.selected = new Set();
+        ms.mode = 'some';
+      }
+      // Toggle
+      if (chk.checked) ms.selected.add(v);
+      else ms.selected.delete(v);
 
-      if (chk.checked) sel.add(v); else sel.delete(v);
+      // Collapse: if all selected → mode=all; if none → mode=none
+      if (ms.selected.size === values.length) { ms.mode = 'all'; ms.selected = new Set(); }
+      else if (ms.selected.size === 0)         { ms.mode = 'none'; }
 
-      // Collapse back to "all" if every item is checked
-      if (sel.size === values.length) sel.clear();
-      // Mark "none" if nothing left
-      if (sel.size === 0 && !chk.checked && !wasAll) sel.add('__none__');
-
-      updateMultiLabel(key, values);
-      refreshMultiCheckboxes(key, values);
+      refreshMultiUI(key, values);
       if (key === 'state') cascadeCityFilter();
       applyFilters();
     };
@@ -1287,50 +1290,51 @@ function buildMultiList(key, values) {
     item.appendChild(document.createTextNode(v));
     listEl.appendChild(item);
   });
-  updateMultiLabel(key, values);
+  refreshMultiUI(key, values);
 }
 
-function refreshMultiCheckboxes(key, values) {
-  const sel = multiSelected[key];
-  const isNone = sel.has('__none__');
-  document.querySelectorAll('#' + key + '-list input[type="checkbox"]').forEach(chk => {
-    chk.checked = !isNone && (sel.size === 0 || sel.has(chk.value));
-  });
+function isChecked(key, v) {
+  const ms = multiState[key];
+  if (ms.mode === 'all')  return true;
+  if (ms.mode === 'none') return false;
+  return ms.selected.has(v);
+}
+
+function refreshMultiUI(key, values) {
+  document.querySelectorAll('#' + key + '-list input[type="checkbox"]')
+    .forEach(chk => { chk.checked = isChecked(key, chk.value); });
+  updateMultiLabel(key, values);
 }
 
 function updateMultiLabel(key, values) {
-  const sel = multiSelected[key];
+  const ms = multiState[key];
   const lbl = document.getElementById(key + '-btn-label');
   const noun = key === 'state' ? 'State' : 'City';
-  if (sel.has('__none__')) lbl.textContent = 'None selected';
-  else if (sel.size === 0) lbl.textContent = 'All ' + noun + 's';
-  else if (sel.size === 1) lbl.textContent = [...sel][0];
-  else lbl.textContent = sel.size + ' ' + noun + 's';
+  if (ms.mode === 'none') lbl.textContent = 'None selected';
+  else if (ms.mode === 'all') lbl.textContent = 'All ' + noun + 's';
+  else if (ms.selected.size === 1) lbl.textContent = [...ms.selected][0];
+  else lbl.textContent = ms.selected.size + ' ' + noun + 's';
 }
 
 function selectAllMulti(key) {
-  multiSelected[key].clear();
+  multiState[key].mode = 'all';
+  multiState[key].selected = new Set();
   const values = [...document.querySelectorAll('#' + key + '-list input')].map(i => i.value);
-  updateMultiLabel(key, values);
-  refreshMultiCheckboxes(key, values);
+  refreshMultiUI(key, values);
   if (key === 'state') cascadeCityFilter();
   applyFilters();
 }
 
 function clearAllMulti(key) {
-  // "None" — keep set empty but treat as "none" by using a sentinel
-  // Actually: just uncheck all visually, set = all values, then clear — 
-  // simpler: we use a __none__ sentinel like dates
+  multiState[key].mode = 'none';
+  multiState[key].selected = new Set();
   const values = [...document.querySelectorAll('#' + key + '-list input')].map(i => i.value);
-  multiSelected[key] = new Set(['__none__']);
-  updateMultiLabel(key, values);
-  refreshMultiCheckboxes(key, values);
+  refreshMultiUI(key, values);
   applyFilters();
 }
 
 function toggleMultiDD(e, ddId) {
   e.stopPropagation();
-  // close other dropdowns
   ['state-dd','city-dd'].forEach(id => {
     if (id !== ddId) document.getElementById(id).classList.remove('open');
   });
@@ -1351,15 +1355,15 @@ function cascadeCityFilter() {
   const selStates = getSelectedVals('state');
   const allMeta = Object.values(HUB_MAP);
   const cities = [...new Set(
-    allMeta.filter(m => !selStates.length || selStates.includes(m.state))
-          .map(m => m.city).filter(Boolean)
+    allMeta
+      .filter(m => !selStates.length || (selStates[0] !== '__none__' && selStates.includes(m.state)))
+      .map(m => m.city).filter(Boolean)
   )].sort();
-  // Reset city selection when state changes
-  multiSelected.city = new Set();
+  multiState.city = { mode: 'all', selected: new Set() };
   buildMultiList('city', cities);
 }
 
-function onStateChange(){ cascadeCityFilter(); applyFilters(); }
+function onStateChange() { cascadeCityFilter(); applyFilters(); }
 
 function pop(id,vals){
   const el = document.getElementById(id);
@@ -1375,19 +1379,21 @@ function pop(id,vals){
 function resetFilters(){
   ['f-zone','f-gm','f-rm','f-am','f-ph'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('f-type').value = 'all';
-  multiSelected.state = new Set();
-  multiSelected.city = new Set();
+  multiState.state = { mode: 'all', selected: new Set() };
+  multiState.city  = { mode: 'all', selected: new Set() };
   const allMeta = Object.values(HUB_MAP);
   buildMultiList('state', [...new Set(allMeta.map(m=>m.state).filter(Boolean))].sort());
-  buildMultiList('city', [...new Set(allMeta.map(m=>m.city).filter(Boolean))].sort());
+  buildMultiList('city',  [...new Set(allMeta.map(m=>m.city).filter(Boolean))].sort());
   selectedDates = new Set();
   buildDateList();
   applyFilters();
 }
 
 function filterDataset(sourceArray) {
-  const states = getSelectedVals('f-state');
-  const cities = getSelectedVals('f-city');
+  const states = getSelectedVals('state');
+  const cities = getSelectedVals('city');
+  const stateNone = states[0] === '__none__';
+  const cityNone  = cities[0] === '__none__';
   const zone = fv('f-zone');
   const gm = fv('f-gm');
   const rm = fv('f-rm');
@@ -1398,8 +1404,8 @@ function filterDataset(sourceArray) {
 
   return sourceArray.filter(r =>
     ad.has(normalizeDateStr(r.date)) &&
-    (!states.length || states.includes(r.state)) &&
-    (!cities.length || cities.includes(r.city)) &&
+    (!stateNone && (!states.length || states.includes(r.state))) &&
+    (!cityNone  && (!cities.length || cities.includes(r.city))) &&
     (!zone || r.zone === zone) &&
     (!gm || r.gm === gm) &&
     (!rm || r.rm === rm) &&
@@ -1444,8 +1450,10 @@ function computeHubPickups(datesSet, targetMap = PICKED_MAP) {
   const hubTotals = {};
   let overallTotal = 0;
 
-  const fState = getSelectedVals('f-state');
-  const fCity = getSelectedVals('f-city');
+  const fStates = getSelectedVals('state');
+  const fCities = getSelectedVals('city');
+  const stateNone = fStates[0] === '__none__';
+  const cityNone  = fCities[0] === '__none__';
   const fZone = fv('f-zone');
   const fGm = fv('f-gm');
   const fRm = fv('f-rm');
@@ -1459,8 +1467,10 @@ function computeHubPickups(datesSet, targetMap = PICKED_MAP) {
 
     const meta = HUB_MAP[hubNorm] || {};
 
-    if (fState.length && !fState.includes(meta.state)) return;
-    if (fCity.length && !fCity.includes(meta.city)) return;
+    if (stateNone) return;
+    if (cityNone)  return;
+    if (fStates.length && !fStates.includes(meta.state)) return;
+    if (fCities.length && !fCities.includes(meta.city))  return;
     if (fZone && meta.zone !== fZone) return;
     if (fGm && meta.gm !== fGm) return;
     if (fRm && meta.rm !== fRm) return;
