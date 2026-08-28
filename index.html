@@ -687,6 +687,25 @@ td.r{
     </div>
   </div>
 
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">
+        <span class="dot" style="background:var(--purple,#7c3aed)"></span>
+        GM View
+      </div>
+      <div class="ptabs" id="tp-gm">
+        <div class="pt on" onclick="setGmP(1,this)">D-1</div>
+        <div class="pt" onclick="setGmP(3,this)">L3D</div>
+        <div class="pt" onclick="setGmP(5,this)">L5D</div>
+        <div class="pt" onclick="setGmP(7,this)">L7D</div>
+        <div class="pt" onclick="setGmP(999,this)">Overall</div>
+      </div>
+    </div>
+    <div class="tw">
+      <table id="t-gm"></table>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -1649,8 +1668,102 @@ function setP(sec,days,el){
   renderSec(sec);
 }
 
+let gmPeriod = 1;
+
+function setGmP(n, el) {
+  gmPeriod = n;
+  document.querySelectorAll('#tp-gm .pt').forEach(e => e.classList.remove('on'));
+  el.classList.add('on');
+  renderGmView();
+}
+
+function renderGmView() {
+  const ds = datesForN(gmPeriod);
+  const rows = filtered.filter(r => ds.has(normalizeDateStr(r.date)));
+  const { hubTotals } = computeHubPickups(ds, PICKED_MAP);
+
+  // Aggregate by GM
+  const gmAgg = {};
+
+  // Add DRR from hubTotals
+  Object.keys(hubTotals).forEach(hubNorm => {
+    const meta = HUB_MAP[hubNorm] || {};
+    const gm = meta.gm || '(Unknown)';
+    if (!gmAgg[gm]) gmAgg[gm] = { gm, p: 0, a: 0, e: 0, ar: 0, d: 0, t: 0 };
+    gmAgg[gm].p += hubTotals[hubNorm] || 0;
+  });
+
+  rows.forEach(r => {
+    const gm = r.gm || '(Unknown)';
+    if (!gmAgg[gm]) gmAgg[gm] = { gm, p: 0, a: 0, e: 0, ar: 0, d: 0, t: 0 };
+    const cnt = r.cnt || 1;
+    if (r.bucket === BA)  gmAgg[gm].a  += cnt;
+    if (r.bucket === BE)  gmAgg[gm].e  += cnt;
+    if (r.bucket === BR)  gmAgg[gm].ar += cnt;
+    if (r.bucket === BD)  gmAgg[gm].d  += cnt;
+    gmAgg[gm].t += cnt;
+  });
+
+  const gmRows = Object.values(gmAgg).sort((a, b) => b.t - a.t);
+  const tbl = document.getElementById('t-gm');
+
+  if (!gmRows.length) {
+    tbl.innerHTML = '<tbody><tr><td class="no-data">No data for this selection.</td></tr></tbody>';
+    return;
+  }
+
+  const gt = { p: 0, a: 0, e: 0, ar: 0, d: 0, t: 0 };
+  gmRows.forEach(r => { gt.p += r.p; gt.a += r.a; gt.e += r.e; gt.ar += r.ar; gt.d += r.d; gt.t += r.t; });
+
+  const bpFmt = r => {
+    const denom = (r.p || 0) + (r.t || 0);
+    return denom > 0 ? ((r.t / denom) * 100).toFixed(2) + '%' : '—';
+  };
+
+  let html = '<thead><tr>'
+    + '<th>GM</th>'
+    + '<th class="r">DRR</th>'
+    + '<th class="r">Attempt Breach</th>'
+    + '<th class="r">EKL Issue</th>'
+    + '<th class="r">Auto Reset</th>'
+    + '<th class="r">Dispatch Breach</th>'
+    + '<th class="r">Grand Total</th>'
+    + '<th class="r">Breach %</th>'
+    + '</tr></thead>';
+
+  html += '<tbody>';
+  gmRows.forEach(r => {
+    html += '<tr>'
+      + '<td>' + (r.gm || '—') + '</td>'
+      + '<td class="r">' + N(r.p) + '</td>'
+      + '<td class="r">' + N(r.a) + '</td>'
+      + '<td class="r">' + N(r.e) + '</td>'
+      + '<td class="r">' + N(r.ar) + '</td>'
+      + '<td class="r">' + N(r.d) + '</td>'
+      + '<td class="r">' + N(r.t) + '</td>'
+      + '<td class="r">' + bpFmt(r) + '</td>'
+      + '</tr>';
+  });
+
+  // Grand total row
+  html += '<tr style="font-weight:700;border-top:2px solid var(--border)">'
+    + '<td>Grand Total</td>'
+    + '<td class="r">' + N(gt.p) + '</td>'
+    + '<td class="r">' + N(gt.a) + '</td>'
+    + '<td class="r">' + N(gt.e) + '</td>'
+    + '<td class="r">' + N(gt.ar) + '</td>'
+    + '<td class="r">' + N(gt.d) + '</td>'
+    + '<td class="r">' + N(gt.t) + '</td>'
+    + '<td class="r">' + bpFmt(gt) + '</td>'
+    + '</tr>';
+
+  html += '</tbody>';
+  tbl.innerHTML = html;
+}
+
 function renderAll(){
   [0,1,2].forEach(i => renderSec(i));
+  renderGmView();
 }
 
 function sortRows(rows,col,asc,buckets,periodDays){
