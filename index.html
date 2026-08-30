@@ -1669,6 +1669,7 @@ function setP(sec,days,el){
 }
 
 let gmPeriod = 1;
+const gmSort = { col: 6, asc: false }; // default: Grand Total desc
 
 function setGmP(n, el) {
   gmPeriod = n;
@@ -1677,15 +1678,19 @@ function setGmP(n, el) {
   renderGmView();
 }
 
+function doGmSort(ci) {
+  if (gmSort.col === ci) gmSort.asc = !gmSort.asc;
+  else { gmSort.col = ci; gmSort.asc = ci === 0; } // text cols default asc, numeric desc
+  renderGmView();
+}
+
 function renderGmView() {
   const ds = datesForN(gmPeriod);
   const rows = filtered.filter(r => ds.has(normalizeDateStr(r.date)));
   const { hubTotals } = computeHubPickups(ds, PICKED_MAP);
 
-  // Aggregate by GM
   const gmAgg = {};
 
-  // Add DRR from hubTotals
   Object.keys(hubTotals).forEach(hubNorm => {
     const meta = HUB_MAP[hubNorm] || {};
     const gm = meta.gm || '(Unknown)';
@@ -1704,9 +1709,17 @@ function renderGmView() {
     gmAgg[gm].t += cnt;
   });
 
-  const gmRows = Object.values(gmAgg).sort((a, b) => b.t - a.t);
-  const tbl = document.getElementById('t-gm');
+  // Sort
+  const colKeys = ['gm', 'p', 'a', 'e', 'ar', 'd', 't', 'bp'];
+  const gmRows = Object.values(gmAgg).sort((a, b) => {
+    const key = colKeys[gmSort.col];
+    const av = key === 'bp' ? (a.p + a.t > 0 ? a.t / (a.p + a.t) : 0) : a[key];
+    const bv = key === 'bp' ? (b.p + b.t > 0 ? b.t / (b.p + b.t) : 0) : b[key];
+    if (typeof av === 'string') return gmSort.asc ? av.localeCompare(bv) : bv.localeCompare(av);
+    return gmSort.asc ? av - bv : bv - av;
+  });
 
+  const tbl = document.getElementById('t-gm');
   if (!gmRows.length) {
     tbl.innerHTML = '<tbody><tr><td class="no-data">No data for this selection.</td></tr></tbody>';
     return;
@@ -1720,15 +1733,20 @@ function renderGmView() {
     return denom > 0 ? ((r.t / denom) * 100).toFixed(2) + '%' : '—';
   };
 
+  const thG = (label, ci, cls = '') => {
+    const sc = gmSort.col === ci ? (gmSort.asc ? ' sorted-asc' : ' sorted-desc') : '';
+    return '<th class="' + cls + sc + '" onclick="doGmSort(' + ci + ')">' + label + ' <span class="si"></span></th>';
+  };
+
   let html = '<thead><tr>'
-    + '<th>GM</th>'
-    + '<th class="r">DRR</th>'
-    + '<th class="r">Attempt Breach</th>'
-    + '<th class="r">EKL Issue</th>'
-    + '<th class="r">Auto Reset</th>'
-    + '<th class="r">Dispatch Breach</th>'
-    + '<th class="r">Grand Total</th>'
-    + '<th class="r">Breach %</th>'
+    + thG('GM', 0)
+    + thG('DRR', 1, 'r')
+    + thG('Attempt Breach', 2, 'r')
+    + thG('EKL Issue', 3, 'r')
+    + thG('Auto Reset', 4, 'r')
+    + thG('Dispatch Breach', 5, 'r')
+    + thG('Grand Total', 6, 'r')
+    + thG('Breach %', 7, 'r')
     + '</tr></thead>';
 
   html += '<tbody>';
@@ -1745,7 +1763,6 @@ function renderGmView() {
       + '</tr>';
   });
 
-  // Grand total row
   html += '<tr style="font-weight:700;border-top:2px solid var(--border)">'
     + '<td>Grand Total</td>'
     + '<td class="r">' + N(gt.p) + '</td>'
