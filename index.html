@@ -1545,34 +1545,35 @@ function renderKPIs(){
   const cntBA = cnt([BA]), cntBE = cnt([BE]), cntBR = cnt([BR]), cntBD = cnt([BD], true);
 
   document.getElementById('kpi-bar').innerHTML =
-    '<div class="kpi k0">' +
+
+  '<div class="kpi k5">' +
+        '<div class="k-lbl">' + modeLabel + 'DRR</div>' +
+        '<div class="k-val">' + fmt(finalPicked) + '</div>' +
+      '</div>' +
+   '<div class="kpi k0">' +
       '<div class="k-lbl">' + modeLabel + 'Total Breaches (' + periodLabel + ')</div>' +
       '<div class="k-val">' + fmt(totalBreaches) + '</div>' +
-      '<div style="font-size:11px;color:var(--navy);margin-top:2px">' + overallPct + ' of DRR+Breaches</div>' +
-    '</div>' +
-    '<div class="kpi k5">' +
-      '<div class="k-lbl">' + modeLabel + 'DRR</div>' +
-      '<div class="k-val">' + fmt(finalPicked) + '</div>' +
+      '<div style="font-size:12px;color:var(--navy);margin-top:2px">' + overallPct + ' of DRR+Breaches</div>' +
     '</div>' +
     '<div class="kpi k1">' +
       '<div class="k-lbl">' + modeLabel + 'Attempt Breach</div>' +
       '<div class="k-val">' + fmt(cntBA) + '</div>' +
-      '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + kpiPct(cntBA) + '</div>' +
+      '<div style="font-size:12px;color:var(--navy);margin-top:2px">' + kpiPct(cntBA) + '</div>' +
     '</div>' +
     '<div class="kpi k2">' +
       '<div class="k-lbl">' + modeLabel + 'EKL Issue</div>' +
       '<div class="k-val">' + fmt(cntBE) + '</div>' +
-      '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + kpiPct(cntBE) + '</div>' +
+      '<div style="font-size:12px;color:var(--navy);margin-top:2px">' + kpiPct(cntBE) + '</div>' +
     '</div>' +
     '<div class="kpi k3">' +
       '<div class="k-lbl">' + modeLabel + 'Auto Reset</div>' +
       '<div class="k-val">' + fmt(cntBR) + '</div>' +
-      '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + kpiPct(cntBR) + '</div>' +
+      '<div style="font-size:12px;color:var(--navy);margin-top:2px">' + kpiPct(cntBR) + '</div>' +
     '</div>' +
     '<div class="kpi k4">' +
       '<div class="k-lbl">' + modeLabel + 'Dispatch Breach (CPD)</div>' +
       '<div class="k-val">' + fmt(cntBD) + '</div>' +
-      '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + kpiPct(cntBD) + '</div>' +
+      '<div style="font-size:12px;color:var(--navy);margin-top:2px">' + kpiPct(cntBD) + '</div>' +
     '</div>';
 }
 
