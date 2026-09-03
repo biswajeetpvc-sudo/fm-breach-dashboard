@@ -437,7 +437,7 @@ td.r{
 
 .sub-table{
   width:100%;
-  max-width:750px;
+  max-width:0px;
   background:#fff;
   border:1px solid var(--border);
   margin-top:6px;
@@ -1817,7 +1817,7 @@ function sortRows(rows,col,asc,buckets,periodDays){
     const hn = String(r.ph || '').trim().toLowerCase();
     if (todayDate && tomorrowDate && isCapacityConsumed(hn, todayDate) && isCapacityConsumed(hn, tomorrowDate)) return 'Take Capacity Action';
     const ratio = (r.d || 0) / (r.t || 1);
-    return ratio > 0.75 ? 'Take 4 hrs buffer' : 'Take 24 hrs buffer';
+    return ratio > 0.70 ? 'Take 4 hrs buffer' : 'Take 24 hrs buffer';
   };
 
   return [...rows].sort((a,b) => {
@@ -2003,7 +2003,7 @@ const hubRows = filterByDrr(
 
     // Step 3: Dispatch breach > 75% of grand total → Take 4 hrs buffer
     const ratio = (d.d || 0) / (d.t || 1);
-    if (ratio > 0.75) {
+    if (ratio > 0.70) {
       return 'Take 4 hrs buffer';
     }
     return 'Take 24 hrs buffer';
