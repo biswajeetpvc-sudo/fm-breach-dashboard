@@ -562,20 +562,18 @@ td.r{
   </div>
 
   <div class="fg">
-  <label>Functional / CPD</label>
-
-  <select id="f-type" onchange="handleFunctionalChange()">
-    <option value="all">Functional Breach</option>
-    <option value="cpd">CPD Breach</option>
-  </select>
-</div>
+    <label>Functional / CPD</label>
+    <select id="f-type" onchange="handleFunctionalChange()">
+      <option value="all">Functional Breach</option>
+      <option value="cpd">CPD Breach</option>
+    </select>
+  </div>
 
   <div class="ptabs" id="tp-drr">
-  <div class="pt on" onclick="setDrrMode('all',this)">All DRR</div>
-  <div class="pt" onclick="setDrrMode('lt500',this)">&lt; 500 DRR</div>
-  <div class="pt" onclick="setDrrMode('gte500',this)">≥ 500 DRR</div>
-</div>
-
+    <div class="pt on" onclick="setDrrMode('all',this)">All DRR</div>
+    <div class="pt" onclick="setDrrMode('lt500',this)">&lt; 500 DRR</div>
+    <div class="pt" onclick="setDrrMode('gte500',this)">≥ 500 DRR</div>
+  </div>
 
   <button class="btn-reset" onclick="resetFilters()">Reset</button>
 
@@ -720,9 +718,9 @@ const PICKUP = [BA,BE,BR];
 let drrMode = 'all';
 let RAW = [];
 let CPD_RAW = [];
-let PICKED_MAP = {}; 
-let CPD_PICKED_MAP = {}; 
-let HUB_MAP = {}; 
+let PICKED_MAP = {};
+let CPD_PICKED_MAP = {};
+let HUB_MAP = {};
 let CAPACITY_MAP = {}; // hubNorm -> { date -> { capacity, consumption } }
 let DATES = [];
 let filtered = [];
@@ -742,20 +740,28 @@ let sortState = [
   {col:0,asc:true}
 ];
 
+// ─────────────────────────────────────────────
+// CASE-INSENSITIVE HELPERS
+// ─────────────────────────────────────────────
+const lc = v => String(v == null ? '' : v).trim().toLowerCase();
+const eq = (a, b) => lc(a) === lc(b);
+const inList = (list, v) => list.some(x => eq(x, v));
+
+// Canonical casing: first-seen spelling wins per (type, lowercase value)
+let CANON = {};
+function canon(type, v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  const k = type + '|' + s.toLowerCase();
+  if (!CANON[k]) CANON[k] = s;
+  return CANON[k];
+}
+
 function N(num) {
   return (num || 0).toLocaleString();
 }
 
-// function pct(t, p) {
-//   if (!p || p === 0) {
-//     return t > 0 ? '100.00%' : '0.00%';
-//   }
-//   return ((t / p) * 100).toFixed(2) + '%';
-// }
-
-
-  function handleFunctionalChange(){
-
+function handleFunctionalChange(){
   const selectedValue = document.getElementById('f-type').value;
 
   if(selectedValue === 'cpd'){
@@ -766,23 +772,21 @@ function N(num) {
   applyFilters();
 }
 
-  function setDrrMode(mode, el){
+function setDrrMode(mode, el){
   drrMode = mode;
   document.getElementById('tp-drr').querySelectorAll('.pt').forEach(t => t.classList.remove('on'));
   el.classList.add('on');
-  applyFilters(); // re-run filters and rendering
+  applyFilters();
 }
 
-  function filterByDrr(rows){
+function filterByDrr(rows){
   if(drrMode === 'all') return rows;
   if(drrMode === 'lt500') return rows.filter(r => (r.p || 0) < 500);
   if(drrMode === 'gte500') return rows.filter(r => (r.p || 0) >= 500);
   return rows;
 }
 
-  
-
-  function pct(d) {
+function pct(d) {
   const numerator = (d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0);
   const denominator = (d.p || 0) + numerator;
   if (denominator === 0) return '0.00%';
@@ -861,7 +865,7 @@ function processDataSet(payload) {
       const hubNorm = hubName.toLowerCase();
 
       if (!HUB_MAP[hubNorm]) {
-        HUB_MAP[hubNorm] = { ph: hubName, zone: '', gm: '', rm: '', am: '' };
+        HUB_MAP[hubNorm] = { ph: canon('ph', hubName), zone: '', gm: '', rm: '', am: '' };
       }
 
       Object.keys(row).forEach(key => {
@@ -882,13 +886,13 @@ function processDataSet(payload) {
 
     if (!HUB_MAP[hubNorm] || !HUB_MAP[hubNorm].zone) {
       HUB_MAP[hubNorm] = {
-        ph: hubName,
-        state: r.state || '',
-        city: r.city || '',
-        zone: r.zone || '',
-        gm: r.gm || '',
-        rm: r.rm || '',
-        am: r.am || ''
+        ph: canon('ph', hubName),
+        state: canon('state', r.state),
+        city: canon('city', r.city),
+        zone: canon('zone', r.zone),
+        gm: canon('gm', r.gm),
+        rm: canon('rm', r.rm),
+        am: canon('am', r.am)
       };
     }
 
@@ -896,10 +900,19 @@ function processDataSet(payload) {
       pickedMap[mapKey] = Number(r.total_picked || r.picked || r.picked_count || 0);
     }
 
+    const meta = HUB_MAP[hubNorm];
+
+    // Canonicalise every row to the hub's master casing so filters & grouping match
     return {
       ...r,
-      ph: hubName,
-      date: date,
+      ph:    meta.ph    || canon('ph', hubName),
+      state: meta.state || canon('state', r.state),
+      city:  meta.city  || canon('city', r.city),
+      zone:  meta.zone  || canon('zone', r.zone),
+      gm:    meta.gm    || canon('gm', r.gm),
+      rm:    meta.rm    || canon('rm', r.rm),
+      am:    meta.am    || canon('am', r.am),
+      date:  date,
       picked: pickedMap[mapKey]
     };
   });
@@ -915,7 +928,6 @@ function buildCapacityMap(payload) {
     const date = normalizeDateStr(row.date);
     if (!hubNorm || !date) return;
     if (!CAPACITY_MAP[hubNorm]) CAPACITY_MAP[hubNorm] = {};
-    // If multiple entries per hub+date, take the one with higher capacity (or accumulate)
     if (!CAPACITY_MAP[hubNorm][date]) {
       CAPACITY_MAP[hubNorm][date] = { capacity: 0, consumption: 0 };
     }
@@ -925,7 +937,6 @@ function buildCapacityMap(payload) {
 }
 
 function getCapacityDates() {
-  // Returns sorted dates from capacity data; last 2 are "today" and "tomorrow"
   const allDates = new Set();
   Object.values(CAPACITY_MAP).forEach(dateMap => Object.keys(dateMap).forEach(d => allDates.add(d)));
   return [...allDates].sort((a, b) => dv(a) - dv(b));
@@ -939,6 +950,7 @@ function isCapacityConsumed(hubNorm, date) {
 
 function init(payload, cpdPayload){
   HUB_MAP = {};
+  CANON = {};
   buildCapacityMap(payload);
 
   const mainData = processDataSet(payload);
@@ -959,7 +971,7 @@ function init(payload, cpdPayload){
   const cpdDates = CPD_RAW.map(r => r.date);
 
   DATES = [...new Set([...rawDates, ...pickedDates, ...cpdDates])].filter(Boolean).sort((a,b) => dv(b) - dv(a));
-  
+
   selectedDates = new Set();
 
   document.getElementById('hdr-meta').textContent =
@@ -979,19 +991,24 @@ function init(payload, cpdPayload){
 
 const fv = id => document.getElementById(id).value;
 
-function buildFilters(){
-  const allMeta = Object.values(HUB_MAP);
-  const uniq = k => [...new Set(allMeta.map(m => m[k]).filter(Boolean))].sort();
+// Unique values from HUB_MAP, de-duplicated case-insensitively
+function uniqMeta(k) {
+  const seen = new Map();
+  Object.values(HUB_MAP).forEach(m => {
+    const v = m[k];
+    if (v && !seen.has(lc(v))) seen.set(lc(v), v);
+  });
+  return [...seen.values()].sort();
+}
 
-  const states = uniq('state');
-  const cities = uniq('city');
-  buildMultiList('state', states);
-  buildMultiList('city', cities);
-  pop('f-zone',uniq('zone'));
-  pop('f-gm',uniq('gm'));
-  pop('f-rm',uniq('rm'));
-  pop('f-am',uniq('am'));
-  pop('f-ph',uniq('ph'));
+function buildFilters(){
+  buildMultiList('state', uniqMeta('state'));
+  buildMultiList('city', uniqMeta('city'));
+  pop('f-zone', uniqMeta('zone'));
+  pop('f-gm', uniqMeta('gm'));
+  pop('f-rm', uniqMeta('rm'));
+  pop('f-am', uniqMeta('am'));
+  pop('f-ph', uniqMeta('ph'));
 
   buildDateList();
 }
@@ -1013,56 +1030,31 @@ function buildDateList(){
     const chk = document.createElement('input');
     chk.type = 'checkbox';
     chk.value = d;
-
-    // Show checkbox according to currently active dates
     chk.checked = active.has(d);
 
     chk.onchange = () => {
-
-      // ─────────────────────────────────────
-      // CASE 1: Current state = NONE
-      // Remove __none__ before selecting a date
-      // ─────────────────────────────────────
       if(selectedDates.has('__none__')){
         selectedDates = new Set();
-      }
-
-      // ─────────────────────────────────────
-      // CASE 2: Current state = ALL DATES
-      // Convert implicit "all" into explicit
-      // selection before changing one checkbox
-      // ─────────────────────────────────────
-      else if(selectedDates.size === 0){
+      } else if(selectedDates.size === 0){
         selectedDates = new Set(DATES);
       }
 
-      // Add or remove clicked date
       if(chk.checked){
         selectedDates.add(d);
       } else {
         selectedDates.delete(d);
       }
 
-      // ─────────────────────────────────────
-      // If every date is selected,
-      // represent it as "All Dates"
-      // ─────────────────────────────────────
       if(selectedDates.size === DATES.length){
         selectedDates = new Set();
       }
 
-      // ─────────────────────────────────────
-      // If no date remains selected,
-      // represent it as "None selected"
-      // ─────────────────────────────────────
       if(selectedDates.size === 0){
         selectedDates = new Set(['__none__']);
       }
 
       updateDateBtnLabel();
       applyFilters();
-
-      // Refresh checkbox UI
       refreshDateCheckboxes();
     };
 
@@ -1074,12 +1066,8 @@ function buildDateList(){
   updateDateBtnLabel();
 }
 
-
-// Refresh only checkbox states
 function refreshDateCheckboxes(){
-
   const active = activeDates();
-
   document
     .querySelectorAll('#date-list input[type="checkbox"]')
     .forEach(chk => {
@@ -1087,178 +1075,61 @@ function refreshDateCheckboxes(){
     });
 }
 
-
-// Select All
 function selectAllDates(){
-
-  // Empty set represents ALL dates
   selectedDates = new Set();
-
   buildDateList();
   applyFilters();
 }
 
-
-// Select None
 function clearAllDates(){
-
-  // Special marker represents NO dates
   selectedDates = new Set(['__none__']);
-
   buildDateList();
   applyFilters();
 }
 
-
-// Update date button text
 function updateDateBtnLabel(){
-
   const lbl = document.getElementById('date-btn-label');
 
-  // Empty set = All Dates
   if(selectedDates.size === 0){
     lbl.textContent = 'All Dates';
     return;
   }
-
-  // Special None state
   if(selectedDates.has('__none__')){
     lbl.textContent = 'None selected';
     return;
   }
-
-  // One selected date
   if(selectedDates.size === 1){
     lbl.textContent = [...selectedDates][0];
     return;
   }
-
-  // Multiple selected dates
   lbl.textContent = selectedDates.size + ' dates selected';
 }
 
-
-// Open / close date dropdown
 function toggleDateDD(e){
-
   e.stopPropagation();
-
-  document
-    .getElementById('date-dd')
-    .classList
-    .toggle('open');
+  document.getElementById('date-dd').classList.toggle('open');
 }
 
-
-// Close dropdown when clicking outside
 document.addEventListener('click', e => {
-
   const dateFg = document.getElementById('date-fg');
-
   if(dateFg && !dateFg.contains(e.target)){
-    document
-      .getElementById('date-dd')
-      .classList
-      .remove('open');
+    document.getElementById('date-dd').classList.remove('open');
   }
 });
 
-
-// Return the actual active dates
 function activeDates(){
-
-  // Empty set means ALL dates
   if(selectedDates.size === 0){
     return new Set(DATES);
   }
-
-  // __none__ means no dates
   if(selectedDates.has('__none__')){
     return new Set();
   }
-
-  // Otherwise return selected dates
   return new Set(selectedDates);
 }
-  
-
-// function buildDateList(){
-//   const list = document.getElementById('date-list');
-//   list.innerHTML = '';
-//   const active = activeDates();
-
-//   DATES.forEach(d => {
-//     const item = document.createElement('label');
-//     item.className = 'date-item';
-
-//     const chk = document.createElement('input');
-//     chk.type = 'checkbox';
-//     chk.value = d;
-//     chk.checked = selectedDates.size === 0 || active.has(d);
-
-//     chk.onchange = () => {
-//       if(selectedDates.size === 0) selectedDates = new Set(DATES);
-//       if(chk.checked) selectedDates.add(d);
-//       else selectedDates.delete(d);
-      
-//       if(selectedDates.size === DATES.length) selectedDates = new Set();
-      
-//       updateDateBtnLabel();
-//       applyFilters();
-//     };
-
-//     item.appendChild(chk);
-//     item.appendChild(document.createTextNode(d));
-//     list.appendChild(item);
-//   });
-
-//   updateDateBtnLabel();
-// }
-
-// function selectAllDates(){
-//   selectedDates = new Set();
-//   buildDateList();
-//   applyFilters();
-// }
-
-// function clearAllDates(){
-//   selectedDates = new Set(['__none__']);
-//   buildDateList();
-//   applyFilters();
-// }
-
-// function updateDateBtnLabel(){
-//   const lbl = document.getElementById('date-btn-label');
-//   if(selectedDates.size === 0) lbl.textContent = 'All Dates';
-//   else if(selectedDates.has('__none__')) lbl.textContent = 'None selected';
-//   else if(selectedDates.size === 1) lbl.textContent = [...selectedDates][0];
-//   else lbl.textContent = selectedDates.size + ' dates selected';
-// }
-
-// function toggleDateDD(e){
-//   e.stopPropagation();
-//   document.getElementById('date-dd').classList.toggle('open');
-// }
-
-// document.addEventListener('click', e => {
-//   if(!document.getElementById('date-fg').contains(e.target)){
-//     document.getElementById('date-dd').classList.remove('open');
-//   }
-// });
-
-// function activeDates(){
-//   if(selectedDates.size === 0) return new Set(DATES);
-//   if(selectedDates.has('__none__')) return new Set();
-//   return selectedDates;
-// }
 
 // ─────────────────────────────────────────────
 // MULTI-SELECT DROPDOWNS (State / City)
 // ─────────────────────────────────────────────
-// State machine per key:
-//   mode = 'all'  → all values pass (empty selection = all)
-//   mode = 'some' → only values in selected set pass
-//   mode = 'none' → nothing passes
 const multiState = {
   state: { mode: 'all', selected: new Set() },
   city:  { mode: 'all', selected: new Set() }
@@ -1266,8 +1137,8 @@ const multiState = {
 
 function getSelectedVals(key) {
   const ms = multiState[key];
-  if (ms.mode === 'all')  return [];           // [] means "no filter"
-  if (ms.mode === 'none') return ['__none__']; // sentinel → nothing matches
+  if (ms.mode === 'all')  return [];
+  if (ms.mode === 'none') return ['__none__'];
   return [...ms.selected];
 }
 
@@ -1283,21 +1154,17 @@ function buildMultiList(key, values) {
     chk.checked = isChecked(key, v);
     chk.onchange = () => {
       const ms = multiState[key];
-      // If currently "all", expanding to explicit (uncheck one item)
       if (ms.mode === 'all') {
         ms.selected = new Set(values);
         ms.mode = 'some';
       }
-      // If currently "none", start fresh with just this item
       if (ms.mode === 'none') {
         ms.selected = new Set();
         ms.mode = 'some';
       }
-      // Toggle
       if (chk.checked) ms.selected.add(v);
       else ms.selected.delete(v);
 
-      // Collapse: if all selected → mode=all; if none → mode=none
       if (ms.selected.size === values.length) { ms.mode = 'all'; ms.selected = new Set(); }
       else if (ms.selected.size === 0)         { ms.mode = 'none'; }
 
@@ -1372,12 +1239,11 @@ document.addEventListener('click', e => {
 
 function cascadeCityFilter() {
   const selStates = getSelectedVals('state');
-  const allMeta = Object.values(HUB_MAP);
-  const cities = [...new Set(
-    allMeta
-      .filter(m => !selStates.length || (selStates[0] !== '__none__' && selStates.includes(m.state)))
-      .map(m => m.city).filter(Boolean)
-  )].sort();
+  const seen = new Map();
+  Object.values(HUB_MAP)
+    .filter(m => !selStates.length || (selStates[0] !== '__none__' && inList(selStates, m.state)))
+    .forEach(m => { if (m.city && !seen.has(lc(m.city))) seen.set(lc(m.city), m.city); });
+  const cities = [...seen.values()].sort();
   multiState.city = { mode: 'all', selected: new Set() };
   buildMultiList('city', cities);
 }
@@ -1400,9 +1266,8 @@ function resetFilters(){
   document.getElementById('f-type').value = 'all';
   multiState.state = { mode: 'all', selected: new Set() };
   multiState.city  = { mode: 'all', selected: new Set() };
-  const allMeta = Object.values(HUB_MAP);
-  buildMultiList('state', [...new Set(allMeta.map(m=>m.state).filter(Boolean))].sort());
-  buildMultiList('city',  [...new Set(allMeta.map(m=>m.city).filter(Boolean))].sort());
+  buildMultiList('state', uniqMeta('state'));
+  buildMultiList('city',  uniqMeta('city'));
   selectedDates = new Set();
   buildDateList();
   applyFilters();
@@ -1423,13 +1288,13 @@ function filterDataset(sourceArray) {
 
   return sourceArray.filter(r =>
     ad.has(normalizeDateStr(r.date)) &&
-    (!stateNone && (!states.length || states.includes(r.state))) &&
-    (!cityNone  && (!cities.length || cities.includes(r.city))) &&
-    (!zone || r.zone === zone) &&
-    (!gm || r.gm === gm) &&
-    (!rm || r.rm === rm) &&
-    (!am || r.am === am) &&
-    (!ph || r.ph === ph) &&
+    (!stateNone && (!states.length || inList(states, r.state))) &&
+    (!cityNone  && (!cities.length || inList(cities, r.city))) &&
+    (!zone || eq(r.zone, zone)) &&
+    (!gm   || eq(r.gm, gm)) &&
+    (!rm   || eq(r.rm, rm)) &&
+    (!am   || eq(r.am, am)) &&
+    (!ph   || eq(r.ph, ph)) &&
     (type !== 'cpd' || r.cpd)
   );
 }
@@ -1486,15 +1351,14 @@ function computeHubPickups(datesSet, targetMap = PICKED_MAP) {
 
     const meta = HUB_MAP[hubNorm] || {};
 
-    if (stateNone) return;
-    if (cityNone)  return;
-    if (fStates.length && !fStates.includes(meta.state)) return;
-    if (fCities.length && !fCities.includes(meta.city))  return;
-    if (fZone && meta.zone !== fZone) return;
-    if (fGm && meta.gm !== fGm) return;
-    if (fRm && meta.rm !== fRm) return;
-    if (fAm && meta.am !== fAm) return;
-    if (fPh && meta.ph !== fPh) return;
+    if (stateNone || cityNone) return;
+    if (fStates.length && !inList(fStates, meta.state)) return;
+    if (fCities.length && !inList(fCities, meta.city))  return;
+    if (fZone && !eq(meta.zone, fZone)) return;
+    if (fGm && !eq(meta.gm, fGm)) return;
+    if (fRm && !eq(meta.rm, fRm)) return;
+    if (fAm && !eq(meta.am, fAm)) return;
+    if (fPh && !eq(meta.ph, fPh)) return;
 
     const val = targetMap[key];
     hubDateMap[key] = val;
@@ -1526,7 +1390,7 @@ function renderKPIs(){
   const periodLabel = kpiPeriod === 1 ? 'D-1' : kpiPeriod === 999 ? 'Overall' : 'Last ' + kpiPeriod + ' Days';
   const modeLabel = isAvg ? 'Avg Daily ' : '';
 
-  const fmt = val => isAvg 
+  const fmt = val => isAvg
     ? val.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
     : N(val);
 
@@ -1535,9 +1399,7 @@ function renderKPIs(){
   const overallPct = totalDenom > 0 ? ((totalBreaches / totalDenom) * 100).toFixed(2) + '%' : '0.00%';
 
   const kpiPct = (numerator) => {
-    const denom = finalPicked + (isAvg ? (totalBreaches) : totalBreaches);
-    // per-bucket %: numerator / (picked + all breaches)
-    const d2 = (isAvg ? finalPicked : finalPicked) + totalBreaches;
+    const d2 = finalPicked + totalBreaches;
     if (!d2) return '0.00%';
     return ((numerator / d2) * 100).toFixed(2) + '%';
   };
@@ -1545,12 +1407,11 @@ function renderKPIs(){
   const cntBA = cnt([BA]), cntBE = cnt([BE]), cntBR = cnt([BR]), cntBD = cnt([BD], true);
 
   document.getElementById('kpi-bar').innerHTML =
-
-  '<div class="kpi k5">' +
-        '<div class="k-lbl">' + modeLabel + 'DRR</div>' +
-        '<div class="k-val">' + fmt(finalPicked) + '</div>' +
-      '</div>' +
-   '<div class="kpi k0">' +
+    '<div class="kpi k5">' +
+      '<div class="k-lbl">' + modeLabel + 'DRR</div>' +
+      '<div class="k-val">' + fmt(finalPicked) + '</div>' +
+    '</div>' +
+    '<div class="kpi k0">' +
       '<div class="k-lbl">' + modeLabel + 'Total Breaches (' + periodLabel + ')</div>' +
       '<div class="k-val">' + fmt(totalBreaches) + '</div>' +
       '<div style="font-size:12px;color:var(--navy);margin-top:2px">' + overallPct + ' of DRR+Breaches</div>' +
@@ -1670,7 +1531,7 @@ function setP(sec,days,el){
 }
 
 let gmPeriod = 1;
-const gmSort = { col: 6, asc: false }; // default: Grand Total desc
+const gmSort = { col: 6, asc: false };
 
 function setGmP(n, el) {
   gmPeriod = n;
@@ -1681,7 +1542,7 @@ function setGmP(n, el) {
 
 function doGmSort(ci) {
   if (gmSort.col === ci) gmSort.asc = !gmSort.asc;
-  else { gmSort.col = ci; gmSort.asc = ci === 0; } // text cols default asc, numeric desc
+  else { gmSort.col = ci; gmSort.asc = ci === 0; }
   renderGmView();
 }
 
@@ -1691,26 +1552,29 @@ function renderGmView() {
   const { hubTotals } = computeHubPickups(ds, PICKED_MAP);
 
   const gmAgg = {};
+  // key by lowercase GM so different casings merge into one row
+  const gmKey = g => lc(g) || '(unknown)';
 
   Object.keys(hubTotals).forEach(hubNorm => {
     const meta = HUB_MAP[hubNorm] || {};
     const gm = meta.gm || '(Unknown)';
-    if (!gmAgg[gm]) gmAgg[gm] = { gm, p: 0, a: 0, e: 0, ar: 0, d: 0, t: 0 };
-    gmAgg[gm].p += hubTotals[hubNorm] || 0;
+    const k = gmKey(gm);
+    if (!gmAgg[k]) gmAgg[k] = { gm, p: 0, a: 0, e: 0, ar: 0, d: 0, t: 0 };
+    gmAgg[k].p += hubTotals[hubNorm] || 0;
   });
 
   rows.forEach(r => {
     const gm = r.gm || '(Unknown)';
-    if (!gmAgg[gm]) gmAgg[gm] = { gm, p: 0, a: 0, e: 0, ar: 0, d: 0, t: 0 };
+    const k = gmKey(gm);
+    if (!gmAgg[k]) gmAgg[k] = { gm, p: 0, a: 0, e: 0, ar: 0, d: 0, t: 0 };
     const cnt = r.cnt || 1;
-    if (r.bucket === BA)  gmAgg[gm].a  += cnt;
-    if (r.bucket === BE)  gmAgg[gm].e  += cnt;
-    if (r.bucket === BR)  gmAgg[gm].ar += cnt;
-    if (r.bucket === BD)  gmAgg[gm].d  += cnt;
-    gmAgg[gm].t += cnt;
+    if (r.bucket === BA)  gmAgg[k].a  += cnt;
+    if (r.bucket === BE)  gmAgg[k].e  += cnt;
+    if (r.bucket === BR)  gmAgg[k].ar += cnt;
+    if (r.bucket === BD)  gmAgg[k].d  += cnt;
+    gmAgg[k].t += cnt;
   });
 
-  // Sort
   const colKeys = ['gm', 'p', 'a', 'e', 'ar', 'd', 't', 'bp'];
   const gmRows = Object.values(gmAgg).sort((a, b) => {
     const key = colKeys[gmSort.col];
@@ -1793,7 +1657,7 @@ function sortRows(rows,col,asc,buckets,periodDays){
   else if(col === 2) key = 'gm';
   else if(col === 3) key = 'rm';
   else if(col === 4) key = 'am';
-  else if(col === 5) key = 'p'; 
+  else if(col === 5) key = 'p';
   else{
     const numericKeys = [];
     if(sA) numericKeys.push('a');
@@ -1862,7 +1726,6 @@ function renderSec(sec){
     const rDate = normalizeDateStr(r.date);
 
     if(!agg[hubNorm]){
-      const meta = HUB_MAP[hubNorm] || {};
       agg[hubNorm] = {
         ph: r.ph, zone: r.zone, gm: r.gm, rm: r.rm, am: r.am,
         p: 0, a: 0, e: 0, ar: 0, d: 0, t: 0, byDate: {}
@@ -1899,10 +1762,10 @@ function renderSec(sec){
   });
 
   const ss = sortState[sec];
-const hubRows = filterByDrr(
-  sortRows(Object.values(agg), ss.col, ss.asc, buckets, periodDays)
-);
-  
+  const hubRows = filterByDrr(
+    sortRows(Object.values(agg), ss.col, ss.asc, buckets, periodDays)
+  );
+
   const gt = { p:0, a:0, e:0, ar:0, d:0, t:0 };
   hubRows.forEach(r => { gt.p += r.p; gt.a += r.a; gt.e += r.e; gt.ar += r.ar; gt.d += r.d; gt.t += r.t; });
 
@@ -1929,7 +1792,10 @@ const hubRows = filterByDrr(
   if(sD) header += thC(prefix + 'Dispatch Breach', numCI++, 'r');
   header += thC(showAverage ? 'Avg Daily Total' : 'Grand Total', numCI++, 'r') + thC(prefix + 'Breach %', numCI++, 'r') + thC('Cap Today', numCI++, 'r') + thC('Cap Tomorrow', numCI++, 'r') + thC('Suggestion', numCI++) + '</tr></thead>';
 
-  const zbadge = z => '<span class="zbadge z-' + (z || 'Unknown') + '">' + (z || '?') + '</span>';
+  const zbadge = z => {
+    const zn = z ? String(z).charAt(0).toUpperCase() + String(z).slice(1).toLowerCase() : 'Unknown';
+    return '<span class="zbadge z-' + zn + '">' + (z || '?') + '</span>';
+  };
 
   const formatValue = value => {
     if(showAverage) return ((value || 0) / periodDays).toLocaleString(undefined, { minimumFractionDigits:1, maximumFractionDigits:1 });
@@ -1943,35 +1809,11 @@ const hubRows = filterByDrr(
     if(sR) html += '<td class="r">' + formatValue(d.ar) + '</td>';
     if(sD) html += '<td class="r">' + formatValue(d.d) + '</td>';
     html += '<td class="r" style="color:var(--blue);font-weight:700">' + formatValue(d.t) + '</td>';
-    // html += '<td class="r">' + pct(d.t, d.p) + '</td>';
     html += '<td class="r">' + pct(d) + '</td>';
     return html;
   };
 
-  // const getSuggText = d => {
-  //   if (!d.t || d.t === 0) {
-  //     return 'No buffer required';
-  //   }
-  //   const avgPickup = ((d.a || 0) + (d.e || 0) + (d.ar || 0)) / periodDays;
-  //   const avgDispatch = (d.d || 0) / periodDays;
-  //   return avgPickup >= avgDispatch ? 'Take 24 hrs buffer' : 'Take 4 hrs buffer';
-
-  // const getSuggText = d => {
-  // if (!d.t || d.t === 0) {
-  //   return 'No buffer required';
-  // }
-  // // Calculate ratio of Dispatch Breach to Daily Total
-  // const ratio = (d.d || 0) / (d.t || 1);
-
-  // // If Dispatch Breach / Daily Total > 75%, take 4 hrs buffer
-  // if (ratio > 0.75) {
-  //   return 'Take 4 hrs buffer';
-  // }
-  // return 'Take 24 hrs buffer';
-  // };
-
-
-      const getSuggText = d => {
+  const getSuggText = d => {
     // Step 1: Grand Total <= 400 OR Breach % <= 2% → No buffer required
     const totalBreaches = (d.a || 0) + (d.e || 0) + (d.ar || 0) + (d.d || 0);
     const denominator = (d.p || 0) + totalBreaches;
@@ -2001,14 +1843,13 @@ const hubRows = filterByDrr(
       return 'Take Capacity Action';
     }
 
-    // Step 3: Dispatch breach > 75% of grand total → Take 4 hrs buffer
+    // Step 3: Dispatch breach > 70% of grand total → Take 4 hrs buffer
     const ratio = (d.d || 0) / (d.t || 1);
     if (ratio > 0.70) {
       return 'Take 4 hrs buffer';
     }
     return 'Take 24 hrs buffer';
   };
-
 
   const getSuggStyle = sugg => {
     if (sugg === 'No buffer required') return 'color:var(--green)';
@@ -2031,7 +1872,7 @@ const hubRows = filterByDrr(
     const consumed = capPct >= 99.9;
     const pctVal = ((entry.consumption / entry.capacity) * 100).toFixed(1) + '%';
     const style = consumed ? 'color:var(--red);font-weight:700' : 'color:var(--green);font-weight:600';
-    return '<td class="r" style="' + style + '" title="' + N(Math.round(entry.consumption)) + ' / ' + N(entry.capacity) + '">' + pctVal  + '</td>';
+    return '<td class="r" style="' + style + '" title="' + N(Math.round(entry.consumption)) + ' / ' + N(entry.capacity) + '">' + pctVal + '</td>';
   };
 
   hubRows.forEach((r, idx) => {
@@ -2062,7 +1903,7 @@ const hubRows = filterByDrr(
       subHtml += '<div style="padding:8px 0; color:var(--green); font-weight:600;">✓ No breaches recorded for this hub in the selected period.</div>';
     } else {
       subHtml += '<table class="sub-table"><thead><tr><th>Breach Date</th><th class="r">Picked</th>';
-      
+
       if(sA) subHtml += '<th class="r">Attempt</th>';
       if(sE) subHtml += '<th class="r">EKL</th>';
       if(sR) subHtml += '<th class="r">Auto Reset</th>';
